@@ -1,77 +1,23 @@
 "use client";
-
 import { useState } from "react";
 
-const steps = [
-  { n: "1", title: "İçerik Radarı", text: "Kaynakları tara, içerikleri puanla ve en güçlü fikri seç." },
-  { n: "2", title: "Hikaye Oluştur", text: "Konuyu yaz, senaryo ve sahneleri otomatik hazırla." },
-  { n: "3", title: "Videoyu Oluştur", text: "Ses, altyazı, görsel ve müzikle final videoyu üret." },
+const menu=["Dashboard","İçerik Radarı","AI Studio","Projeler","Hazır Videolar","Ayarlar"];
+const modes=[
+ {id:"short",icon:"⚡",title:"Kısa Video",sub:"TikTok · Reels · Shorts",ratio:"9:16",desc:"15–90 saniyelik hızlı sosyal medya videoları."},
+ {id:"long",icon:"▶",title:"Uzun Video",sub:"YouTube",ratio:"16:9",desc:"5–20+ dakikalık bölümlü ve anlatımlı videolar."},
+ {id:"story",icon:"✦",title:"Hikaye Videosu",sub:"Karakterli · Sahneli",ratio:"9:16 / 16:9",desc:"Sabit karakterler ve referans görsellerle hikaye üret."},
+ {id:"radar",icon:"◎",title:"İçerik Radarı",sub:"Fikir keşfi",ratio:"Trend",desc:"Kaynakları tara, fikirleri puanla ve üretime gönder."}
 ];
-
-export default function Home() {
-  const [topic, setTopic] = useState("");
-  const [generated, setGenerated] = useState(false);
-
-  return (
-    <main>
-      <header className="topbar">
-        <div>
-          <div className="brand">POSTFLOW</div>
-          <div className="muted">AI Video Production Studio</div>
-        </div>
-        <div className="status"><span /> Web sürümü aktif</div>
-      </header>
-
-      <section className="hero">
-        <div className="eyebrow">İÇERİKTEN VİDEOYA TEK AKIŞ</div>
-        <h1>Fikri bul. Hikayeyi oluştur. Videoyu üret.</h1>
-        <p>PostFlow, içerik keşfinden sahne planlamaya ve video üretimine kadar süreci tek panelde toplar.</p>
-      </section>
-
-      <section className="steps">
-        {steps.map((step) => (
-          <article className="step" key={step.n}>
-            <div className="stepNo">{step.n}</div>
-            <h2>{step.title}</h2>
-            <p>{step.text}</p>
-          </article>
-        ))}
-      </section>
-
-      <section className="workspace">
-        <div className="workspaceHead">
-          <div>
-            <div className="eyebrow">2. HİKAYE OLUŞTUR</div>
-            <h2>Ne ile ilgili içerik üretmek istiyorsun?</h2>
-          </div>
-          <div className="pill">9:16 · Shorts / Reels</div>
-        </div>
-
-        <textarea
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-          placeholder="Örn: Terk edilmiş bir otelde gece vardiyasında yaşanan gizemli olay..."
-        />
-        <div className="actions">
-          <button className="primary" onClick={() => setGenerated(Boolean(topic.trim()))}>Hikaye İçeriğini Oluştur</button>
-        </div>
-
-        <div className={`storyPreview ${generated ? "visible" : ""}`}>
-          <div className="previewTitle">Hikaye taslağı</div>
-          <p>{generated ? `“${topic}” konusu için senaryo ve sahne planı hazır. Media Engine bağlantısı açıldığında ses, altyazı ve materyal üretimi bu akışa bağlanacak.` : ""}</p>
-        </div>
-
-        <div className="videoStage">
-          <div>
-            <div className="eyebrow">3. VİDEO ÜRETİMİ</div>
-            <h3>Final üretime hazır</h3>
-            <p>Seslendirme, altyazı, materyal ve arka plan müziği Media Engine üzerinden birleştirilecek.</p>
-          </div>
-          <button className="videoBtn" disabled={!generated}>Videoyu Oluştur</button>
-        </div>
-      </section>
-
-      <footer>PostFlow · Web V1</footer>
-    </main>
-  );
+export default function Home(){
+ const [section,setSection]=useState("Dashboard"); const [mode,setMode]=useState<string|null>(null); const [topic,setTopic]=useState(""); const [ready,setReady]=useState(false); const [chars,setChars]=useState([{name:"",desc:"",file:""}]);
+ const addChar=()=>setChars([...chars,{name:"",desc:"",file:""}]);
+ if(mode&&mode!=="radar") return <main><header className="topbar"><div><div className="brand">POSTFLOW</div><div className="muted">AI Video Production Studio</div></div><button className="ghost" onClick={()=>{setMode(null);setReady(false)}}>← Dashboard</button></header><section className="studio">
+  <div className="studioTitle"><div><div className="eyebrow">AI STUDIO</div><h1>{modes.find(x=>x.id===mode)?.title}</h1><p>{modes.find(x=>x.id===mode)?.sub}</p></div><span className="pill">{modes.find(x=>x.id===mode)?.ratio}</span></div>
+  <div className="formGrid"><label>Video Türü<select><option>{modes.find(x=>x.id===mode)?.title}</option></select></label><label>Kategori<select><option>Hikaye / Eğlence</option><option>Korku / Gerilim</option><option>Bilgi</option><option>Motivasyon</option></select></label><label>Dil<select><option>Türkçe</option><option>English</option><option>العربية</option></select></label><label>Ses<select><option>Otomatik seç</option><option>Kadın</option><option>Erkek</option></select></label></div>
+  {mode==="story"&&<section className="characters"><div className="sectionHead"><div><div className="eyebrow">KARAKTERLER</div><h2>Karakter ve referans görselleri</h2><p>Karakteri bir kez ekle; sahnelerde aynı kimliği korumak için referans olarak kullanılır.</p></div><button className="ghost" onClick={addChar}>+ Karakter Ekle</button></div>{chars.map((c,i)=><div className="charRow" key={i}><input placeholder="Karakter adı" value={c.name} onChange={e=>{let n=[...chars];n[i].name=e.target.value;setChars(n)}}/><input placeholder="Görünüş / kıyafet / özellikler" value={c.desc} onChange={e=>{let n=[...chars];n[i].desc=e.target.value;setChars(n)}}/><label className="upload">📷 {c.file||"Referans görsel yükle"}<input type="file" accept="image/*" onChange={e=>{let n=[...chars];n[i].file=e.target.files?.[0]?.name||"";setChars(n)}}/></label></div>)}</section>}
+  <section className="creator"><div className="eyebrow">1. ADIM · HİKAYE İÇERİĞİ</div><h2>Ne ile ilgili içerik üretmek istiyorsun?</h2><textarea value={topic} onChange={e=>setTopic(e.target.value)} placeholder="Konuyu, olay örgüsünü veya üretmek istediğin içeriği anlat..."/><button className="primary" disabled={!topic.trim()} onClick={()=>setReady(true)}>Hikaye İçeriğini Oluştur</button>{ready&&<div className="blueprint"><b>✓ İçerik planı hazır</b><p>Senaryo, sahneler ve video planı üretim aşamasına hazır. Bu adım henüz final videoyu oluşturmaz.</p></div>}
+  <div className="finalStage"><div><div className="eyebrow">2. ADIM · VİDEO ÜRETİMİ</div><h2>Final videoyu oluştur</h2><p>Görseller, karakter referansları, seslendirme, altyazı ve müzik birleştirilir.</p></div><button className="videoBtn" disabled={!ready}>Videoyu Oluştur</button></div></section>
+ </section></main>;
+ if(mode==="radar") return <main><header className="topbar"><div className="brand">POSTFLOW</div><button className="ghost" onClick={()=>setMode(null)}>← Dashboard</button></header><section className="studio"><div className="eyebrow">İÇERİK RADARI</div><h1>Yeni içerik fikirlerini keşfet</h1><p className="lead">Kaynak tarama, puanlama ve üretime gönderme alanı.</p><div className="empty">Radar kaynak bağlantıları Media Engine ile birlikte etkinleştirilecek.</div></section></main>;
+ return <main><aside className="sidebar"><div className="brand sideBrand">POSTFLOW</div>{menu.map(x=><button key={x} className={section===x?"nav active":"nav"} onClick={()=>setSection(x)}>{x}</button>)}</aside><div className="shell"><header className="mobileTop"><div className="brand">POSTFLOW</div><div className="status"><span/> Web aktif</div></header><section className="dash"><div className="eyebrow">{section.toUpperCase()}</div><h1>{section==="Dashboard"?"Bugün ne üretmek istiyorsun?":section}</h1><p className="lead">{section==="Dashboard"?"Video türünü seç ve PostFlow üretim akışını başlat.":"Bu bölüm PostFlow çalışma alanının bir parçasıdır."}</p>{section==="Dashboard"||section==="AI Studio"?<div className="modeGrid">{modes.map(m=><button className="modeCard" key={m.id} onClick={()=>setMode(m.id)}><div className="modeIcon">{m.icon}</div><div className="modeTop"><h2>{m.title}</h2><span>{m.ratio}</span></div><b>{m.sub}</b><p>{m.desc}</p><div className="go">Başlat →</div></button>)}</div>:<div className="empty">{section} ekranı hazır. İçerikler ve kayıtlı çalışmalar burada listelenecek.</div>}</section></div></main>;
 }
