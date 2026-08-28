@@ -3,12 +3,16 @@ import { generateMptStory, MptUnavailableError, type MptStoryRequest } from "@/l
 
 export const runtime = "nodejs";
 
+type CharacterInput = NonNullable<MptStoryRequest["characterBible"]>[number];
+
+function isCharacterInput(item: unknown): item is CharacterInput {
+  return Boolean(item) && typeof item === "object" && typeof (item as { name?: unknown }).name === "string";
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as Record<string, unknown>;
-    const characters = Array.isArray(body.characterBible)
-      ? body.characterBible.filter((item): item is MptStoryRequest["characterBible"][number] => Boolean(item) && typeof item === "object" && typeof (item as { name?: unknown }).name === "string")
-      : [];
+    const characters = Array.isArray(body.characterBible) ? body.characterBible.filter(isCharacterInput) : [];
 
     const input: MptStoryRequest = {
       subject: typeof body.subject === "string" ? body.subject : "",
