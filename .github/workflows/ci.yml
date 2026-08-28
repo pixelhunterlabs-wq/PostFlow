@@ -26,3 +26,13 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+      - name: Parse Windows launcher
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("installer/windows/Start-PostFlow-Local.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
