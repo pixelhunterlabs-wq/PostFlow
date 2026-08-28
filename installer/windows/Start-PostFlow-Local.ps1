@@ -17,13 +17,11 @@ function Get-MptInstallation {
     $installation = [pscustomobject]@{
         PortableRoot = $MptRoot
         SourceRoot = $sourceRoot
-        StartBat = Join-Path $MptRoot "start.bat"
         Python = Join-Path $MptRoot "lib\python\python.exe"
         ApiMain = Join-Path $sourceRoot "main.py"
-        WebUiMain = Join-Path $sourceRoot "webui\Main.py"
         Config = Join-Path $sourceRoot "config.toml"
     }
-    foreach ($path in @($installation.StartBat, $installation.Python, $installation.ApiMain, $installation.WebUiMain, $installation.Config)) {
+    foreach ($path in @($installation.Python, $installation.ApiMain, $installation.Config)) {
         if (!(Test-Path -LiteralPath $path)) { throw "Geçerli MoneyPrinterTurbo v1.3.5 taşınabilir kurulumu bulunamadı. Eksik dosya: $path" }
     }
     return $installation
@@ -36,10 +34,6 @@ function Test-MptHealth([int]$Port) {
     } catch { return $false }
 }
 
-function Test-MptWebUi {
-    return [bool](Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -ge 8501 -and $_.LocalPort -le 8599 } | Select-Object -First 1)
-}
-
 function Get-MptApiPort($installation) {
     $candidatePorts = [System.Collections.Generic.List[int]]::new()
     $candidatePorts.Add(8080)
@@ -49,10 +43,6 @@ function Get-MptApiPort($installation) {
     }
     foreach ($port in ($candidatePorts | Select-Object -Unique)) { if (Test-MptHealth $port) { return $port } }
     return 0
-}
-
-function Start-MptWebUi($installation) {
-    Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "call `"$($installation.StartBat)`"" -WorkingDirectory $installation.PortableRoot
 }
 
 function Start-MptApi($installation) {
@@ -80,8 +70,7 @@ try {
     $installation = Get-MptInstallation
     $mptPort = Get-MptApiPort $installation
     if ($mptPort -eq 0) {
-        Write-Host "MoneyPrinterTurbo WebUI ve API başlatılıyor…"
-        if (!(Test-MptWebUi)) { Start-MptWebUi $installation }
+        Write-Host "MoneyPrinterTurbo API arka planda başlatılıyor…"
         Start-MptApi $installation
         $mptPort = Wait-MptApi $installation
     }

@@ -37,6 +37,20 @@ type MptTaskData = {
   failed_stage?: string;
 };
 
+function translateMptError(message?: string) {
+  if (!message) return undefined;
+  if (message.toLowerCase().includes("failed to generate video search terms")) return "Video arama terimleri oluşturulamadı. MPT sağlayıcı/LLM yapılandırmasını kontrol edin.";
+  return message;
+}
+
+function translateFailedStage(stage?: string) {
+  if (stage === "terms") return "Arama terimleri";
+  if (stage === "materials") return "Materyaller";
+  if (stage === "audio") return "Seslendirme";
+  if (stage === "render") return "Render";
+  return stage;
+}
+
 function getMptBaseUrl() {
   // A Vercel function runs on Vercel's network, never on the creator's PC.
   if (process.env.VERCEL) {
@@ -105,8 +119,8 @@ function mapTask(data: MptTaskData): MptTaskStatus {
     status,
     progress: Math.max(0, Math.min(100, Number(data.progress ?? (status === "completed" ? 100 : 0)))),
     videos,
-    error: data.error,
-    failedStage: data.failed_stage,
+    error: translateMptError(data.error),
+    failedStage: translateFailedStage(data.failed_stage),
   };
 }
 
