@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateMptStory, MptUnavailableError, type MptStoryRequest } from "@/lib/moneyprinterturbo";
+import { generateOllamaStory } from "@/lib/local-ollama";
+import { MptUnavailableError, type MptStoryRequest } from "@/lib/moneyprinterturbo";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
       characterBible: characters,
     };
 
-    return NextResponse.json(await generateMptStory(input));
+    return NextResponse.json(await generateOllamaStory(input));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Hikâye içeriği oluşturulamadı.";
     const status = error instanceof MptUnavailableError ? error.status : 500;
