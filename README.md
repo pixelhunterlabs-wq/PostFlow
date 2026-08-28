@@ -2,47 +2,39 @@
 
 Private/local-first AI video production studio.
 
-## Media Engine (Phase 1)
+## Windows: MoneyPrinterTurbo portable (no Docker / WSL)
 
-PostFlow now includes a separate Python/FastAPI media engine inspired by the MIT-licensed MoneyPrinterTurbo project. The first integration provides:
+PostFlow integrates the official MoneyPrinterTurbo **v1.3.5** portable Windows package. The adapter uses its real WebUI API: `GET /ping`, `POST /api/v1/videos`, and `GET /api/v1/tasks/{task_id}`. The first run downloads the official archive, verifies its exact SHA-256 and size, tests the 7z archive, extracts it under `C:\PostFlow\MoneyPrinterTurbo`, then starts MPT and PostFlow in separate visible terminals.
 
-- Edge TTS voice generation
-- SRT subtitle generation
-- 9:16, 16:9 and 1:1 video rendering
-- Image/video material concatenation
-- Narration + background music mixing
-- A small TypeScript client for the Next.js application
-- Docker packaging with FFmpeg
-
-### Run locally
-
-```bash
-cd media-engine
-python -m venv .venv
-# Windows: .venv\\Scripts\\activate
-# macOS/Linux: source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn app:app --host 127.0.0.1 --port 8787 --reload
-```
-
-Health check:
+From a checkout of this repository, run:
 
 ```text
-GET http://127.0.0.1:8787/health
+installer\windows\Start-PostFlow-Local.cmd
 ```
 
-Next.js should use:
+It opens PostFlow only after MPT responds with `pong` on its API port (normally `8080`) and PostFlow is available on `http://127.0.0.1:3000`. Logs are retained in `C:\PostFlow\logs`.
+
+The launcher sets the local-only variables automatically:
 
 ```env
-MEDIA_ENGINE_URL=http://127.0.0.1:8787
+POSTFLOW_LOCAL_RUNTIME=1
+POSTFLOW_MPT_API=http://127.0.0.1:8080
 ```
 
-### Next integration steps
+For an existing local MPT install, the launcher finds `start.bat` recursively and uses its own directory as the working directory. It will not overwrite an existing incomplete install; its error identifies the exact folder to inspect.
 
-1. Material search/download adapters (Pexels/Pixabay/local library)
-2. Subtitle burn-in and style controls
-3. Render task queue and progress tracking
-4. Connect PostFlow video projects/scenes to `/v1/voice`, `/v1/subtitles`, `/v1/render`
-5. Optional publishing adapters after render
+### Important runtime boundary
+
+Vercel production cannot reach `127.0.0.1` on a creator's Windows machine. “Videoyu Oluştur” is intentionally enabled only when PostFlow and MoneyPrinterTurbo run locally. It returns a clear Turkish message if the local service is unavailable.
+
+Character names and descriptions are included in the submitted script context, but MoneyPrinterTurbo v1.3.5 does **not** document a reference-image/character-identity API. PostFlow therefore does not claim that MPT will preserve a Character Bible reference image or lock a face across scenes.
+
+## Validation
+
+```bash
+npm install
+npm run typecheck
+npm run build
+```
 
 See `THIRD_PARTY_NOTICES.md` for MoneyPrinterTurbo attribution and license details.
