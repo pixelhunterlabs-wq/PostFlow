@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       aspect: isAspect(body.aspect) ? body.aspect : "9:16",
       language: typeof body.language === "string" ? body.language : "tr",
       voice: typeof body.voice === "string" ? body.voice : undefined,
-      materialSource: body.materialSource === "local" || body.materialSource === "pixabay" || body.materialSource === "pexels" ? body.materialSource : "pexels",
+      materialSource: body.materialSource === "pexels" || body.materialSource === "pixabay" ? body.materialSource : "local",
       subtitleEnabled: body.subtitleEnabled !== false,
     };
     return NextResponse.json(await createMptVideo(input), { status: 202 });
