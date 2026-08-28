@@ -4,3 +4,5 @@ node_modules.incomplete-*/
 next-env.d.ts
 *.tsbuildinfo
 .env.local
+AGENTS.md
+CLAUDE.md
