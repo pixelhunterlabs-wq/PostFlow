@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 
-type Character={name:string;desc:string;file:string};
+type Character={id:string;name:string;desc:string;file:string};
 type Project={id:string;title:string;mode:string;topic:string;status:string;createdAt:string};
 type Settings={language:string;voice:string;subtitle:boolean;music:boolean;material:string;aspect:string;duration:string};
+type MptTask={taskId:string;status:"queued"|"processing"|"completed"|"failed";progress:number;videos:string[];error?:string;failedStage?:string};
 
 const menu=["Dashboard","İçerik Radarı","AI Studio","Projeler","Hazır Videolar","Ayarlar"];
 const modes=[
@@ -26,7 +27,8 @@ export default function Home(){
  const [topic,setTopic]=useState("");
  const [ready,setReady]=useState(false);
  const [renderMsg,setRenderMsg]=useState("");
- const [chars,setChars]=useState<Character[]>([{name:"",desc:"",file:""}]);
+ const [chars,setChars]=useState<Character[]>([{id:"character-1",name:"",desc:"",file:""}]);
+ const [mptTask,setMptTask]=useState<MptTask|null>(null);
  const [projects,setProjects]=useState<Project[]>([]);
  const [settings,setSettings]=useState<Settings>({language:"Türkçe",voice:"Otomatik seç",subtitle:true,music:true,material:"Stok + Yerel",aspect:"9:16",duration:"60 sn"});
  const [category,setCategory]=useState("Hikaye / Eğlence");
@@ -34,14 +36,43 @@ export default function Home(){
  useEffect(()=>{try{setProjects(JSON.parse(localStorage.getItem("postflow-projects")||"[]"));const s=localStorage.getItem("postflow-settings");if(s)setSettings(JSON.parse(s));}catch{}},[]);
  useEffect(()=>{localStorage.setItem("postflow-projects",JSON.stringify(projects))},[projects]);
  useEffect(()=>{localStorage.setItem("postflow-settings",JSON.stringify(settings))},[settings]);
+ useEffect(()=>{
+  if(!mptTask||mptTask.status==="completed"||mptTask.status==="failed")return;
+  let cancelled=false;
+  const timer=window.setTimeout(async()=>{
+   try{
+    const response=await fetch(`/api/local/mpt/jobs/${encodeURIComponent(mptTask.taskId)}`,{cache:"no-store"});
+    const data=await response.json() as MptTask&{error?:string};
+    if(!response.ok)throw new Error(data.error||"MoneyPrinterTurbo görev durumu okunamadı.");
+    if(!cancelled)setMptTask(data);
+   }catch(error){if(!cancelled){const message=error instanceof Error?error.message:"MoneyPrinterTurbo görev durumu okunamadı.";setMptTask(current=>current?{...current,status:"failed",error:message}:current);setRenderMsg(message);}}
+  },2000);
+  return()=>{cancelled=true;window.clearTimeout(timer)};
+ },[mptTask]);
 
  const activeMode=useMemo(()=>modes.find(x=>x.id===mode),[mode]);
  const resetStudio=()=>{setMode(null);setReady(false);setRenderMsg("");setTopic("");};
- const addChar=()=>setChars([...chars,{name:"",desc:"",file:""}]);
+ const addChar=()=>setChars([...chars,{id:crypto.randomUUID(),name:"",desc:"",file:""}]);
  const removeChar=(i:number)=>setChars(chars.filter((_,x)=>x!==i));
  const generate=()=>{if(!topic.trim())return;setReady(true);setRenderMsg("");};
  const saveProject=()=>{if(!topic.trim()||!mode)return;const p:Project={id:crypto.randomUUID(),title:topic.slice(0,55),mode:activeMode?.title||mode,topic,status:ready?"Plan hazır":"Taslak",createdAt:new Date().toLocaleString("tr-TR")};setProjects([p,...projects]);};
- const renderVideo=async()=>{setRenderMsg("Media Engine bağlantısı hazırlanıyor. Web arayüzü ve proje verisi hazır; final MP4 için render sunucusu bağlanmalı.");};
+ const renderVideo=async()=>{
+  if(!ready||!topic.trim())return;
+  setRenderMsg("MoneyPrinterTurbo yerel motoru kontrol ediliyor…");
+  setMptTask(null);
+  const materialSource=settings.material.includes("Yalnız")?"local":settings.material.includes("Pixabay")?"pixabay":"pexels";
+  const characterContext=chars.filter(c=>c.name.trim()).map(c=>`${c.name}: ${c.desc||"karakter detayı girilmedi"}`).join("\n");
+  try{
+   const health=await fetch("/api/local/mpt/health",{cache:"no-store"});
+   const healthData=await health.json() as {error?:string};
+   if(!health.ok)throw new Error(healthData.error||"MoneyPrinterTurbo kapalı.");
+   const response=await fetch("/api/local/mpt/jobs",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({subject:topic.trim(),script:[topic.trim(),characterContext].filter(Boolean).join("\n\n"),aspect:settings.aspect,language:settings.language==="Türkçe"?"tr":settings.language==="English"?"en":"ar",voice:settings.voice==="Otomatik seç"?undefined:settings.voice,materialSource,subtitleEnabled:settings.subtitle})});
+   const data=await response.json() as {taskId?:string;error?:string};
+   if(!response.ok||!data.taskId)throw new Error(data.error||"MoneyPrinterTurbo görevi başlatılamadı.");
+   setMptTask({taskId:data.taskId,status:"queued",progress:0,videos:[]});
+   setRenderMsg("Yerel MoneyPrinterTurbo görevi sıraya alındı. Durum otomatik yenileniyor.");
+  }catch(error){setRenderMsg(error instanceof Error?error.message:"MoneyPrinterTurbo görevi başlatılamadı.");}
+ };
 
  if(mode==="radar") return <main><header className="topbar"><div><div className="brand">POSTFLOW</div><div className="muted">AI Video Production Studio</div></div><button className="ghost" onClick={resetStudio}>← Dashboard</button></header><section className="studio"><div className="eyebrow">İÇERİK RADARI</div><h1>Yeni içerik fikirlerini keşfet</h1><p className="lead">Fikir havuzunu puanla, seç ve doğrudan üretime gönder.</p><div className="radarGrid">{radarIdeas.map((r,i)=><article className="radarCard" key={i}><div><span className="score">{r.score}</span><b>{r.tag}</b></div><h3>{r.title}</h3><button className="ghost" onClick={()=>{setTopic(r.title);setMode("short")}}>Üretime Gönder →</button></article>)}</div></section></main>;
 
@@ -56,14 +87,15 @@ export default function Home(){
    <label>Süre<select value={settings.duration} onChange={e=>setSettings({...settings,duration:e.target.value})}><option>30 sn</option><option>60 sn</option><option>90 sn</option><option>5 dk</option><option>10 dk</option><option>20 dk</option></select></label>
   </div>
 
-  {mode==="story"&&<section className="characters"><div className="sectionHead"><div><div className="eyebrow">KARAKTERLER</div><h2>Karakter ve referans görselleri</h2><p>Karakteri bir kez ekle; sahnelerde aynı kimliği korumak için referans olarak kullanılır.</p></div><button className="ghost" onClick={addChar}>+ Karakter Ekle</button></div>{chars.map((c,i)=><div className="charRow" key={i}><input placeholder="Karakter adı" value={c.name} onChange={e=>{const n=[...chars];n[i].name=e.target.value;setChars(n)}}/><input placeholder="Görünüş / kıyafet / özellikler" value={c.desc} onChange={e=>{const n=[...chars];n[i].desc=e.target.value;setChars(n)}}/><label className="upload">📷 {c.file||"Referans görsel yükle"}<input type="file" accept="image/*" onChange={e=>{const n=[...chars];n[i].file=e.target.files?.[0]?.name||"";setChars(n)}}/></label>{chars.length>1&&<button className="danger" onClick={()=>removeChar(i)}>Sil</button>}</div>)}</section>}
+  {mode==="story"&&<section className="characters"><div className="sectionHead"><div><div className="eyebrow">KARAKTERLER</div><h2>Karakter ve referans görselleri</h2><p>Karakter detayları hikaye planına eklenir. MoneyPrinterTurbo v1.3.5 referans görselleri için kimlik kilidi sunmaz.</p></div><button className="ghost" onClick={addChar}>+ Karakter Ekle</button></div>{chars.map((c,i)=><div className="charRow" key={c.id}><input placeholder="Karakter adı" value={c.name} onChange={e=>{const n=[...chars];n[i].name=e.target.value;setChars(n)}}/><input placeholder="Görünüş / kıyafet / özellikler" value={c.desc} onChange={e=>{const n=[...chars];n[i].desc=e.target.value;setChars(n)}}/><label className="upload">📷 {c.file||"Referans görsel yükle"}<input type="file" accept="image/*" onChange={e=>{const n=[...chars];n[i].file=e.target.files?.[0]?.name||"";setChars(n)}}/></label>{chars.length>1&&<button className="danger" onClick={()=>removeChar(i)}>Sil</button>}</div>)}</section>}
 
   <section className="creator"><div className="eyebrow">1. ADIM · İÇERİK PLANI</div><h2>Ne ile ilgili içerik üretmek istiyorsun?</h2><textarea value={topic} onChange={e=>setTopic(e.target.value)} placeholder="Konuyu, olay örgüsünü veya üretmek istediğin içeriği anlat..."/>
    <div className="switches"><label><input type="checkbox" checked={settings.subtitle} onChange={e=>setSettings({...settings,subtitle:e.target.checked})}/> Altyazı</label><label><input type="checkbox" checked={settings.music} onChange={e=>setSettings({...settings,music:e.target.checked})}/> Arka plan müziği</label><label>Materyal <select value={settings.material} onChange={e=>setSettings({...settings,material:e.target.value})}><option>Stok + Yerel</option><option>Yalnız Yerel</option><option>Pexels / Pixabay</option></select></label></div>
    <div className="actionsRow"><button className="ghost" onClick={saveProject}>Taslak Kaydet</button><button className="primary" disabled={!topic.trim()} onClick={generate}>Hikaye İçeriğini Oluştur</button></div>
    {ready&&<div className="blueprint"><div className="planHead"><b>✓ İçerik planı hazır</b><span>{mode==="long"?"8 bölüm / sahne":"6 sahne"}</span></div><p><b>Konu:</b> {topic}</p><p><b>Kategori:</b> {category} · <b>Dil:</b> {settings.language} · <b>Süre:</b> {settings.duration}</p>{mode==="story"&&<p><b>Karakterler:</b> {chars.filter(c=>c.name).map(c=>c.name).join(", ")||"Henüz isim verilmedi"}</p>}<div className="sceneList">{Array.from({length:mode==="long"?8:6}).map((_,i)=><div key={i}><span>{i+1}</span><p><b>Sahne {i+1}</b><br/>Konunun akışına uygun görsel, anlatım ve geçiş planı.</p></div>)}</div></div>}
-   <div className="finalStage"><div><div className="eyebrow">2. ADIM · VİDEO ÜRETİMİ</div><h2>Final videoyu oluştur</h2><p>Seslendirme, altyazı, materyaller, karakter referansları ve müzik Media Engine üzerinden birleştirilir.</p></div><button className="videoBtn" disabled={!ready} onClick={renderVideo}>Videoyu Oluştur</button></div>
+   <div className="finalStage"><div><div className="eyebrow">2. ADIM · VİDEO ÜRETİMİ</div><h2>Final videoyu oluştur</h2><p>Yerel MoneyPrinterTurbo; seslendirme, altyazı ve materyalleri birleştirir. Bu akış yalnızca bilgisayarınızda çalışır.</p></div><button className="videoBtn" disabled={!ready} onClick={renderVideo}>Videoyu Oluştur</button></div>
    {renderMsg&&<div className="notice">{renderMsg}</div>}
+   {mptTask&&<div className="notice"><b>MPT görevi:</b> {mptTask.status} · %{mptTask.progress}{mptTask.failedStage&&<> · Aşama: {mptTask.failedStage}</>}{mptTask.error&&<><br/>{mptTask.error}</>}{mptTask.videos.length>0&&<div>{mptTask.videos.map(video=><p key={video}><a href={video} target="_blank" rel="noreferrer">Oluşturulan videoyu aç →</a></p>)}</div>}</div>}
   </section>
  </section></main>;
 
@@ -71,8 +103,8 @@ export default function Home(){
   if(section==="Dashboard"||section==="AI Studio") return <div className="modeGrid">{modes.map(m=><button className="modeCard" key={m.id} onClick={()=>setMode(m.id)}><div className="modeIcon">{m.icon}</div><div className="modeTop"><h2>{m.title}</h2><span>{m.ratio}</span></div><b>{m.sub}</b><p>{m.desc}</p><div className="go">Başlat →</div></button>)}</div>;
   if(section==="İçerik Radarı") return <div className="radarGrid">{radarIdeas.map((r,i)=><article className="radarCard" key={i}><div><span className="score">{r.score}</span><b>{r.tag}</b></div><h3>{r.title}</h3><button className="ghost" onClick={()=>{setTopic(r.title);setMode("short")}}>Üretime Gönder →</button></article>)}</div>;
   if(section==="Projeler") return projects.length?<div className="tableList">{projects.map(p=><article key={p.id}><div><b>{p.title}</b><p>{p.mode} · {p.createdAt}</p></div><span>{p.status}</span><button className="danger" onClick={()=>setProjects(projects.filter(x=>x.id!==p.id))}>Sil</button></article>)}</div>:<div className="empty">Henüz kayıtlı proje yok. AI Studio’dan bir taslak kaydet.</div>;
-  if(section==="Hazır Videolar") return <div className="empty">Render edilen videolar burada görünecek. Media Engine sunucusu bağlandıktan sonra MP4 çıktıları bu ekranda listelenecek.</div>;
-  if(section==="Ayarlar") return <div className="settingsGrid"><label>Varsayılan dil<select value={settings.language} onChange={e=>setSettings({...settings,language:e.target.value})}><option>Türkçe</option><option>English</option><option>العربية</option></select></label><label>Varsayılan ses<select value={settings.voice} onChange={e=>setSettings({...settings,voice:e.target.value})}><option>Otomatik seç</option><option>Kadın</option><option>Erkek</option></select></label><label>Varsayılan materyal<select value={settings.material} onChange={e=>setSettings({...settings,material:e.target.value})}><option>Stok + Yerel</option><option>Yalnız Yerel</option><option>Pexels / Pixabay</option></select></label><div className="toggleBox"><label><input type="checkbox" checked={settings.subtitle} onChange={e=>setSettings({...settings,subtitle:e.target.checked})}/> Altyazı varsayılan açık</label><label><input type="checkbox" checked={settings.music} onChange={e=>setSettings({...settings,music:e.target.checked})}/> Müzik varsayılan açık</label></div><div className="engineStatus"><b>Media Engine</b><span className="offline">Bağlantı bekleniyor</span><p>FastAPI + FFmpeg render motoru repo içinde hazır. Web’den erişilebilir sunucuya deploy edilmesi gerekiyor.</p></div></div>;
+  if(section==="Hazır Videolar") return <div className="empty">Tamamlanan yerel MoneyPrinterTurbo görevlerinin çıktı bağlantıları üretim ekranında görünür.</div>;
+  if(section==="Ayarlar") return <div className="settingsGrid"><label>Varsayılan dil<select value={settings.language} onChange={e=>setSettings({...settings,language:e.target.value})}><option>Türkçe</option><option>English</option><option>العربية</option></select></label><label>Varsayılan ses<select value={settings.voice} onChange={e=>setSettings({...settings,voice:e.target.value})}><option>Otomatik seç</option><option>Kadın</option><option>Erkek</option></select></label><label>Varsayılan materyal<select value={settings.material} onChange={e=>setSettings({...settings,material:e.target.value})}><option>Stok + Yerel</option><option>Yalnız Yerel</option><option>Pexels / Pixabay</option></select></label><div className="toggleBox"><label><input type="checkbox" checked={settings.subtitle} onChange={e=>setSettings({...settings,subtitle:e.target.checked})}/> Altyazı varsayılan açık</label><label><input type="checkbox" checked={settings.music} onChange={e=>setSettings({...settings,music:e.target.checked})}/> Müzik varsayılan açık</label></div><div className="engineStatus"><b>Yerel MoneyPrinterTurbo</b><span className="offline">Yerel launcher bekleniyor</span><p>Vercel üretimi bilgisayarınızdaki MPT API&apos;sine erişemez. Windows launcher önce MPT&apos;yi, sonra PostFlow&apos;u yerelde başlatır.</p></div></div>;
   return null;
  };
 
