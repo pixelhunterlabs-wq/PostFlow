@@ -42,6 +42,19 @@ function Resolve-Python([string]$SourceRoot, [string]$PortableRoot) {
     return $null
 }
 
+function Resolve-OllamaExecutable {
+    $command = Get-Command ollama.exe -ErrorAction SilentlyContinue
+    if ($command -and $command.Source) { return $command.Source }
+    $knownPaths = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"),
+        (Join-Path $env:LOCALAPPDATA "Ollama\ollama.exe")
+    )
+    foreach ($path in $knownPaths) {
+        if (Test-Path -LiteralPath $path) { return $path }
+    }
+    return $null
+}
+
 function Get-MptInstallation {
     $roots = [System.Collections.Generic.List[string]]::new()
     if ($env:POSTFLOW_MPT_ROOT) { $roots.Add($env:POSTFLOW_MPT_ROOT) }
@@ -62,15 +75,47 @@ function Get-MptInstallation {
             Python = $python
             ApiMain = $main
             Config = Join-Path $sourceRoot "config.toml"
+            ConfigExample = Join-Path $sourceRoot "config.example.toml"
         }
     }
     return $null
 }
 
+function Set-TomlString([string]$Content, [string]$Key, [string]$Value) {
+    $escaped = [Regex]::Escape($Key)
+    $replacement = "$Key = `"$Value`""
+    if ($Content -match "(?m)^\s*$escaped\s*=") {
+        return [Regex]::Replace($Content, "(?m)^\s*$escaped\s*=.*$", $replacement, 1)
+    }
+    return "$Content`r`n$replacement`r`n"
+}
+
+function Configure-MptForPostFlow($installation) {
+    if (!(Test-Path -LiteralPath $installation.Config)) {
+        if (Test-Path -LiteralPath $installation.ConfigExample) {
+            Copy-Item -LiteralPath $installation.ConfigExample -Destination $installation.Config
+        } else {
+            throw "MoneyPrinterTurbo config.toml bulunamadı ve config.example.toml mevcut değil."
+        }
+    }
+
+    $content = Get-Content -LiteralPath $installation.Config -Raw
+    $content = Set-TomlString -Content $content -Key "llm_provider" -Value "ollama"
+    $content = Set-TomlString -Content $content -Key "ollama_model_name" -Value $OllamaModel
+    $content = Set-TomlString -Content $content -Key "video_source" -Value "local"
+    $content = Set-TomlString -Content $content -Key "subtitle_provider" -Value "edge"
+    Set-Content -LiteralPath $installation.Config -Value $content -Encoding utf8
+    Write-Host "MPT yapılandırıldı: Ollama $OllamaModel + Edge TTS/altyazı + yerel video kaynağı"
+}
+
 function Start-MptApi($installation) {
     Write-Host "MoneyPrinterTurbo API başlatılıyor: $($installation.SourceRoot)"
-    $pythonArgs = if ([System.IO.Path]::GetFileName($installation.Python).ToLowerInvariant() -eq "py.exe") { "-3 main.py" } else { "main.py" }
-    $command = "set `"PYTHONPATH=$($installation.SourceRoot)`"&& `"$($installation.Python)`" $pythonArgs"
+    $fileName = [System.IO.Path]::GetFileName($installation.Python).ToLowerInvariant()
+    $command = if ($fileName -eq "py.exe") {
+        "set `"PYTHONPATH=$($installation.SourceRoot)`"&& `"$($installation.Python)`" -3 main.py"
+    } else {
+        "set `"PYTHONPATH=$($installation.SourceRoot)`"&& `"$($installation.Python)`" main.py"
+    }
     Start-Process -FilePath "cmd.exe" -ArgumentList "/k", $command -WorkingDirectory $installation.SourceRoot
 }
 
@@ -93,13 +138,9 @@ function Test-OllamaHealth {
 
 function Start-OllamaIfNeeded {
     if (Test-OllamaHealth) { return }
-    $ollama = Get-Command ollama.exe -ErrorAction SilentlyContinue
-    if (!$ollama) {
-        $known = Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"
-        if (Test-Path -LiteralPath $known) { $ollama = Get-Item -LiteralPath $known }
-    }
-    if (!$ollama) { throw "Ollama bulunamadı. Ollama'yı kurun veya PATH'e ekleyin." }
-    Start-Process -FilePath $ollama.Source -ArgumentList "serve" -WindowStyle Hidden
+    $ollamaExe = Resolve-OllamaExecutable
+    if (!$ollamaExe) { throw "Ollama bulunamadı. Ollama'yı kurun veya PATH'e ekleyin." }
+    Start-Process -FilePath $ollamaExe -ArgumentList "serve" -WindowStyle Hidden
     $deadline = (Get-Date).AddSeconds(30)
     do {
         if (Test-OllamaHealth) { return }
@@ -110,19 +151,20 @@ function Start-OllamaIfNeeded {
 
 function Ensure-OllamaModel {
     $tags = Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags" -TimeoutSec 5
-    $names = @($tags.models | ForEach-Object { $_.name })
-    if ($names -contains $OllamaModel -or $names | Where-Object { $_ -like "$OllamaModel*" }) {
+    $names = @($tags.models | ForEach-Object { [string]$_.name })
+    $modelFound = $false
+    foreach ($name in $names) {
+        if ($name -eq $OllamaModel -or $name -like "$OllamaModel*") { $modelFound = $true; break }
+    }
+    if ($modelFound) {
         Write-Host "Ollama modeli hazır: $OllamaModel"
         return
     }
-    $ollama = Get-Command ollama.exe -ErrorAction SilentlyContinue
-    if (!$ollama) {
-        $known = Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe"
-        if (Test-Path -LiteralPath $known) { $ollama = Get-Item -LiteralPath $known }
-    }
-    if (!$ollama) { throw "Ollama modeli eksik ve ollama.exe bulunamadı." }
+
+    $ollamaExe = Resolve-OllamaExecutable
+    if (!$ollamaExe) { throw "Ollama modeli eksik ve ollama.exe bulunamadı." }
     Write-Host "$OllamaModel modeli indiriliyor. İlk kurulumda birkaç dakika sürebilir…"
-    & $ollama.Source pull $OllamaModel
+    & $ollamaExe pull $OllamaModel
     if ($LASTEXITCODE -ne 0) { throw "$OllamaModel modeli indirilemedi." }
 }
 
@@ -153,9 +195,12 @@ try {
             }
             $installation = Get-MptInstallation
         }
-        if (!$installation) { throw "MoneyPrinterTurbo kurulumu bulundu ancak çalıştırılabilir main.py/Python eşleşmesi çözülemedi." }
+        if (!$installation) { throw "MoneyPrinterTurbo kurulumu bulundu ancak main.py/Python eşleşmesi çözülemedi." }
+        Configure-MptForPostFlow $installation
         Start-MptApi $installation
         $mptPort = Wait-MptApi
+    } else {
+        Write-Host "Çalışan MoneyPrinterTurbo API bulundu: http://127.0.0.1:$mptPort"
     }
 
     Ensure-NodeModules
