@@ -118,7 +118,8 @@ export async function getMptHealth() {
   } catch {
     throw new MptUnavailableError("MoneyPrinterTurbo kapalı. Başlatmak için PostFlow yerel launcher'ını açın.");
   }
-  if (!response.ok || (await response.text()).trim() !== "pong") {
+  const body = (await response.text()).trim();
+  if (!response.ok || (body !== "pong" && body !== "\"pong\"")) {
     throw new MptUnavailableError("MoneyPrinterTurbo API sağlık kontrolünden geçemedi. Launcher logunu kontrol edin.");
   }
   return { ok: true, apiUrl: baseUrl };
