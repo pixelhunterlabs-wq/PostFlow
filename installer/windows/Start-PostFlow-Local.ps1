@@ -37,12 +37,7 @@ function Test-MptHealth([int]$Port) {
 }
 
 function Test-MptWebUi {
-    foreach ($port in 8501..8599) {
-        try {
-            if ((Invoke-WebRequest -Uri "http://127.0.0.1:$port" -TimeoutSec 2 -UseBasicParsing).StatusCode -eq 200) { return $true }
-        } catch {}
-    }
-    return $false
+    return [bool](Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -ge 8501 -and $_.LocalPort -le 8599 } | Select-Object -First 1)
 }
 
 function Get-MptApiPort($installation) {
