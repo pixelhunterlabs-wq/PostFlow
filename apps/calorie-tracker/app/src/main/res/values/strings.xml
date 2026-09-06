@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">Kalori Takip</string>
     <string name="privacy_policy_title">Gizlilik Politikası</string>
+    <string name="privacy_shortcut_short">Gizlilik</string>
+    <string name="privacy_shortcut_long">Gizlilik Politikası</string>
 </resources>
