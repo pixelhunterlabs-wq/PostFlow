@@ -36,15 +36,15 @@ All four tables use owner-only RLS policies based on `auth.uid() = user_id`.
 - Supabase cloud sync
 - in-app account + calorie data deletion flow
 - authenticated `delete-calorie-account` Supabase Edge Function
-- bundled offline privacy-policy screen (`PrivacyPolicyActivity`)
-- Turkish public privacy-policy HTML ready for HTTPS hosting
+- Turkish privacy-policy HTML
+- local privacy-policy Activity + `calorietracker://privacy` deep link
+- custom launcher icon
 - Turkish Play Store listing draft
 - Google Play Data Safety / Health Apps declaration draft
-- custom launcher icon
-- Play Store asset specification for icon, feature graphic and screenshots
-- unit tests for calorie-state calculations
-- GitHub Actions unit-test + debug APK verification
-- GitHub Actions release-candidate AAB verification
+- Google Play release checklist
+- unit-test gate before debug APK build
+- GitHub Actions debug APK build verification
+- GitHub Actions release-candidate AAB build verification
 - optional Play upload-key signing pipeline
 
 ## Verified Android builds
@@ -52,10 +52,10 @@ All four tables use owner-only RLS policies based on `auth.uid() = user_id`.
 Debug APK:
 
 ```bash
-gradle -p apps/calorie-tracker testDebugUnitTest assembleDebug --stacktrace
+gradle -p apps/calorie-tracker assembleDebug --stacktrace
 ```
 
-The Android workflow runs unit tests before building and uploads `calorie-tracker-debug` only after a successful build.
+The verified workflow uploads `calorie-tracker-debug`.
 
 Release candidate AAB:
 
@@ -63,7 +63,11 @@ Release candidate AAB:
 gradle -p apps/calorie-tracker bundleRelease --stacktrace
 ```
 
-The AAB workflow uploads `calorie-tracker-release-aab`.
+The verified workflow uploads `calorie-tracker-release-aab`.
+
+## Automated tests
+
+The Android CI runs unit tests before building the debug APK. Current tests cover core daily/7-day/30-day/monthly calorie-summary behavior so future UI/refactor work cannot silently break basic calculations.
 
 ## Play upload signing
 
@@ -86,21 +90,29 @@ Version-controlled function source:
 
 `supabase/functions/delete-calorie-account/`
 
-## Privacy policy
+## Privacy
 
-Public-hosting source:
+Store HTML source:
 
 `store/privacy-policy.html`
 
-Bundled in-app copy:
+Local Android privacy screen:
 
-`app/src/main/assets/privacy-policy.html`
+`app/src/main/java/com/pixelhunter/calorietracker/PrivacyPolicyActivity.kt`
 
-Android screen:
+Deep link:
 
-`PrivacyPolicyActivity`
+`calorietracker://privacy`
 
-The activity is addressable with the internal deep link `calorietracker://privacy`. The main-screen visible entry point still needs final UI wiring before production submission.
+A public HTTPS copy must still be published before Google Play production submission.
+
+## Release tracking
+
+Use:
+
+`store/PLAY_RELEASE_CHECKLIST.md`
+
+It contains runtime device tests, Play assets, Data Safety, Health Apps, signing, and final submission checks.
 
 ## Local setup
 
@@ -134,12 +146,11 @@ Supabase Auth setup:
 
 ## Remaining before Play Store production release
 
-- runtime device test of Google OAuth, barcode scan/Open Food Facts and account deletion using a disposable test account
+- runtime device test of Google OAuth, barcode/Open Food Facts and account deletion using a disposable test account
 - create the real Play upload keystore and add the four GitHub Actions secrets
-- wire a visible privacy-policy button into the main app UI
-- generate final 512x512 Play icon, 1024x500 feature graphic and phone screenshots
+- visibly expose the local privacy-policy screen from the main signed-in UI
+- final 512x512 Play icon, phone screenshots and 1024x500 feature graphic
 - publish privacy policy at a public HTTPS URL
-- complete Play Console Data Safety / Health Apps declarations, target audience and content rating
+- complete Play Console Data Safety / Health Apps declarations and content rating
 - optional camera/AI food estimation
 - optional Play Billing premium tier
-- instrumentation/UI tests
