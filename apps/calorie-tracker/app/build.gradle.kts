@@ -42,7 +42,12 @@ android {
     }
 }
 
-kotlin { jvmToolchain(17) }
+kotlin {
+    jvmToolchain(17)
+    compilerOptions {
+        freeCompilerArgs.add("-opt-in=androidx.compose.material3.ExperimentalMaterial3Api")
+    }
+}
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.08.00"))
