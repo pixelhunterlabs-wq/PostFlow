@@ -27,6 +27,8 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.handleDeeplinks
 import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.functions.Functions
+import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
@@ -82,10 +84,7 @@ data class WeightEntry(
 }
 
 @Serializable
-private data class OffResponse(
-    val status: Int = 0,
-    val product: OffProduct? = null
-)
+private data class OffResponse(val status: Int = 0, val product: OffProduct? = null)
 
 @Serializable
 private data class OffProduct(
@@ -125,6 +124,7 @@ object SupabaseProvider {
                 host = "login"
             }
             install(Postgrest)
+            install(Functions)
         }
     }
 }
@@ -138,6 +138,7 @@ data class TrackerUiState(
     val weights: List<WeightEntry> = emptyList(),
     val barcodeLoading: Boolean = false,
     val barcodeProduct: BarcodeProduct? = null,
+    val accountDeleting: Boolean = false,
     val message: String? = null
 ) {
     private val today = LocalDate.now()
@@ -171,6 +172,9 @@ data class TrackerUiState(
 
     val monthAverage: Int
         get() = (monthCalories / today.dayOfMonth.coerceAtLeast(1)).toInt()
+
+    val recentFoods: List<CalorieEntry>
+        get() = entries.distinctBy { it.foodName.trim().lowercase() }.take(6)
 }
 
 class TrackerViewModel : ViewModel() {
@@ -182,13 +186,8 @@ class TrackerViewModel : ViewModel() {
 
     init { refreshSessionAndData() }
 
-    fun consumeMessage() {
-        uiState = uiState.copy(message = null)
-    }
-
-    fun clearBarcodeProduct() {
-        uiState = uiState.copy(barcodeProduct = null)
-    }
+    fun consumeMessage() { uiState = uiState.copy(message = null) }
+    fun clearBarcodeProduct() { uiState = uiState.copy(barcodeProduct = null) }
 
     fun refreshSessionAndData() {
         val client = supabase ?: run {
@@ -225,15 +224,28 @@ class TrackerViewModel : ViewModel() {
         }
     }
 
+    fun deleteAccount() {
+        val client = supabase ?: return
+        viewModelScope.launch {
+            uiState = uiState.copy(accountDeleting = true)
+            runCatching {
+                client.functions.invoke("delete-calorie-account")
+            }.onSuccess {
+                runCatching { client.auth.signOut() }
+                uiState = TrackerUiState(message = "Hesabın ve Kalori Takip verilerin silindi")
+            }.onFailure {
+                uiState = uiState.copy(accountDeleting = false, message = it.message ?: "Hesap silinemedi")
+            }
+        }
+    }
+
     private suspend fun ensureProfile(userId: String, email: String) {
         val client = supabase ?: return
         val current = client.from("calorie_profiles").select().decodeList<CalorieProfile>().firstOrNull()
         if (current == null) {
             client.from("calorie_profiles").insert(CalorieProfile(userId = userId, email = email, dailyCalorieTarget = 2000))
             uiState = uiState.copy(calorieGoal = 2000)
-        } else {
-            uiState = uiState.copy(calorieGoal = current.dailyCalorieTarget ?: 2000)
-        }
+        } else uiState = uiState.copy(calorieGoal = current.dailyCalorieTarget ?: 2000)
     }
 
     private suspend fun loadAll() {
@@ -265,9 +277,7 @@ class TrackerViewModel : ViewModel() {
                     try {
                         if (connection.responseCode !in 200..299) error("Ürün servisine ulaşılamadı")
                         json.decodeFromString<OffResponse>(connection.inputStream.bufferedReader().use { it.readText() })
-                    } finally {
-                        connection.disconnect()
-                    }
+                    } finally { connection.disconnect() }
                 }
             }.onSuccess { response ->
                 val product = response.product
@@ -289,25 +299,18 @@ class TrackerViewModel : ViewModel() {
                         fat100g = nutrients?.fat100g ?: 0.0
                     )
                 )
-            }.onFailure {
-                uiState = uiState.copy(barcodeLoading = false, message = it.message ?: "Barkod ürünü alınamadı")
-            }
+            }.onFailure { uiState = uiState.copy(barcodeLoading = false, message = it.message ?: "Barkod ürünü alınamadı") }
         }
     }
 
     fun addBarcodeFood(product: BarcodeProduct, meal: String, grams: Double) {
         val ratio = grams / 100.0
-        addFood(
-            name = product.name,
-            meal = meal,
-            grams = grams,
-            calories = product.calories100g * ratio,
-            protein = product.protein100g * ratio,
-            carbs = product.carbs100g * ratio,
-            fat = product.fat100g * ratio,
-            source = "open_food_facts:${product.barcode}"
-        )
+        addFood(product.name, meal, grams, product.calories100g * ratio, product.protein100g * ratio, product.carbs100g * ratio, product.fat100g * ratio, "open_food_facts:${product.barcode}")
         clearBarcodeProduct()
+    }
+
+    fun addRecentFood(entry: CalorieEntry) {
+        addFood(entry.foodName, entry.mealType, entry.grams, entry.calories, entry.proteinG, entry.carbsG, entry.fatG, "recent")
     }
 
     fun addFood(name: String, meal: String, grams: Double, calories: Double, protein: Double, carbs: Double, fat: Double, source: String = "manual") {
@@ -316,17 +319,7 @@ class TrackerViewModel : ViewModel() {
             val user = client.auth.currentUserOrNull() ?: return@launch
             runCatching {
                 client.from("calorie_food_entries").insert(
-                    CalorieEntry(
-                        userId = user.id,
-                        foodName = name.trim(),
-                        mealType = meal.trim().ifBlank { "Öğün" },
-                        grams = grams,
-                        calories = calories,
-                        proteinG = protein,
-                        carbsG = carbs,
-                        fatG = fat,
-                        source = source
-                    )
+                    CalorieEntry(userId = user.id, foodName = name.trim(), mealType = meal.trim().ifBlank { "Öğün" }, grams = grams, calories = calories, proteinG = protein, carbsG = carbs, fatG = fat, source = source)
                 )
                 loadAll()
                 uiState = uiState.copy(message = "Yemek kaydı eklendi")
@@ -339,16 +332,9 @@ class TrackerViewModel : ViewModel() {
         viewModelScope.launch {
             runCatching {
                 client.from("calorie_food_entries").update({
-                    set("food_name", name.trim())
-                    set("meal_type", meal.trim().ifBlank { "Öğün" })
-                    set("grams", grams)
-                    set("calories", calories)
-                    set("protein_g", protein)
-                    set("carbs_g", carbs)
-                    set("fat_g", fat)
+                    set("food_name", name.trim()); set("meal_type", meal.trim().ifBlank { "Öğün" }); set("grams", grams); set("calories", calories); set("protein_g", protein); set("carbs_g", carbs); set("fat_g", fat)
                 }) { filter { eq("id", entry.id) } }
-                loadAll()
-                uiState = uiState.copy(message = "Yemek kaydı güncellendi")
+                loadAll(); uiState = uiState.copy(message = "Yemek kaydı güncellendi")
             }.onFailure { uiState = uiState.copy(message = it.message ?: "Yemek güncellenemedi") }
         }
     }
@@ -356,11 +342,8 @@ class TrackerViewModel : ViewModel() {
     fun deleteFood(entryId: String) {
         val client = supabase ?: return
         viewModelScope.launch {
-            runCatching {
-                client.from("calorie_food_entries").delete { filter { eq("id", entryId) } }
-                loadAll()
-                uiState = uiState.copy(message = "Yemek kaydı silindi")
-            }.onFailure { uiState = uiState.copy(message = it.message ?: "Yemek silinemedi") }
+            runCatching { client.from("calorie_food_entries").delete { filter { eq("id", entryId) } }; loadAll(); uiState = uiState.copy(message = "Yemek kaydı silindi") }
+                .onFailure { uiState = uiState.copy(message = it.message ?: "Yemek silinemedi") }
         }
     }
 
@@ -368,22 +351,16 @@ class TrackerViewModel : ViewModel() {
         val client = supabase ?: return
         viewModelScope.launch {
             val user = client.auth.currentUserOrNull() ?: return@launch
-            runCatching {
-                client.from("calorie_weight_entries").insert(WeightEntry(userId = user.id, weightKg = weightKg))
-                loadAll()
-                uiState = uiState.copy(message = "Kilo kaydı eklendi")
-            }.onFailure { uiState = uiState.copy(message = it.message ?: "Kilo kaydı eklenemedi") }
+            runCatching { client.from("calorie_weight_entries").insert(WeightEntry(userId = user.id, weightKg = weightKg)); loadAll(); uiState = uiState.copy(message = "Kilo kaydı eklendi") }
+                .onFailure { uiState = uiState.copy(message = it.message ?: "Kilo kaydı eklenemedi") }
         }
     }
 
     fun deleteWeight(entryId: String) {
         val client = supabase ?: return
         viewModelScope.launch {
-            runCatching {
-                client.from("calorie_weight_entries").delete { filter { eq("id", entryId) } }
-                loadAll()
-                uiState = uiState.copy(message = "Kilo kaydı silindi")
-            }.onFailure { uiState = uiState.copy(message = it.message ?: "Kilo kaydı silinemedi") }
+            runCatching { client.from("calorie_weight_entries").delete { filter { eq("id", entryId) } }; loadAll(); uiState = uiState.copy(message = "Kilo kaydı silindi") }
+                .onFailure { uiState = uiState.copy(message = it.message ?: "Kilo kaydı silinemedi") }
         }
     }
 
@@ -393,9 +370,7 @@ class TrackerViewModel : ViewModel() {
             val user = client.auth.currentUserOrNull() ?: return@launch
             runCatching {
                 val existing = client.from("calorie_profiles").select().decodeList<CalorieProfile>().firstOrNull()
-                client.from("calorie_profiles").upsert(
-                    (existing ?: CalorieProfile(userId = user.id, email = user.email)).copy(dailyCalorieTarget = goal)
-                )
+                client.from("calorie_profiles").upsert((existing ?: CalorieProfile(userId = user.id, email = user.email)).copy(dailyCalorieTarget = goal))
                 uiState = uiState.copy(calorieGoal = goal, message = "Günlük hedef güncellendi")
             }.onFailure { uiState = uiState.copy(message = it.message ?: "Hedef güncellenemedi") }
         }
@@ -404,19 +379,12 @@ class TrackerViewModel : ViewModel() {
 
 class MainActivity : ComponentActivity() {
     private var authCallbackTick by mutableIntStateOf(0)
-
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        SupabaseProvider.client?.handleDeeplinks(intent)
+        super.onCreate(savedInstanceState); enableEdgeToEdge(); SupabaseProvider.client?.handleDeeplinks(intent)
         setContent { MaterialTheme { TrackerApp(authRefreshKey = authCallbackTick) } }
     }
-
     override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        SupabaseProvider.client?.handleDeeplinks(intent)
-        authCallbackTick++
+        super.onNewIntent(intent); setIntent(intent); SupabaseProvider.client?.handleDeeplinks(intent); authCallbackTick++
     }
 }
 
@@ -432,285 +400,85 @@ fun TrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()) {
     var pendingDeleteWeight by remember { mutableStateOf<WeightEntry?>(null) }
     var showGoalDialog by remember { mutableStateOf(false) }
     var showManualBarcode by remember { mutableStateOf(false) }
+    var showDeleteAccount by remember { mutableStateOf(false) }
 
     val scannerOptions = remember {
-        GmsBarcodeScannerOptions.Builder()
-            .setBarcodeFormats(Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E)
-            .enableAutoZoom()
-            .build()
+        GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E).enableAutoZoom().build()
     }
     val barcodeScanner = remember(context) { GmsBarcodeScanning.getClient(context, scannerOptions) }
 
     LaunchedEffect(authRefreshKey) { vm.refreshSessionAndData() }
-    LaunchedEffect(state.message) {
-        state.message?.let {
-            snackbarHostState.showSnackbar(it)
-            vm.consumeMessage()
-        }
-    }
+    LaunchedEffect(state.message) { state.message?.let { snackbarHostState.showSnackbar(it); vm.consumeMessage() } }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            TopAppBar(title = { Text("Kalori Takip") }, actions = {
-                if (state.signedIn) TextButton(onClick = vm::signOut) { Text("Çıkış") }
-            })
-        },
-        floatingActionButton = {
-            if (state.signedIn) FloatingActionButton(onClick = { editingEntry = null; showFoodDialog = true }) { Text("+") }
-        }
+        topBar = { TopAppBar(title = { Text("Kalori Takip") }, actions = { if (state.signedIn) TextButton(onClick = vm::signOut) { Text("Çıkış") } }) },
+        floatingActionButton = { if (state.signedIn && !state.accountDeleting) FloatingActionButton(onClick = { editingEntry = null; showFoodDialog = true }) { Text("+") } }
     ) { padding ->
         when {
-            !SupabaseProvider.configured -> Box(Modifier.fillMaxSize().padding(padding).padding(24.dp), contentAlignment = Alignment.Center) {
-                Text("Supabase bağlantısı ayarlanmamış. apps/calorie-tracker/local.properties dosyasına SUPABASE_URL ve SUPABASE_KEY ekleyin.")
-            }
+            !SupabaseProvider.configured -> Box(Modifier.fillMaxSize().padding(padding).padding(24.dp), contentAlignment = Alignment.Center) { Text("Supabase bağlantısı ayarlanmamış.") }
             !state.signedIn -> Column(Modifier.fillMaxSize().padding(padding).padding(24.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Kalorini ve kilo değişimini tek yerde takip et.", style = MaterialTheme.typography.headlineSmall)
-                Spacer(Modifier.height(24.dp))
-                Button(onClick = vm::signInWithGoogle) { Text("Google ile devam et") }
+                Text("Kalorini ve kilo değişimini tek yerde takip et.", style = MaterialTheme.typography.headlineSmall); Spacer(Modifier.height(24.dp)); Button(onClick = vm::signInWithGoogle) { Text("Google ile devam et") }
             }
             else -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (state.loading || state.barcodeLoading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-                item {
-                    Text(state.email, style = MaterialTheme.typography.labelMedium)
-                    Spacer(Modifier.height(8.dp))
-                    SummaryCard(state) { showGoalDialog = true }
-                }
-                item {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        StatCard("7 gün ort.", "${state.averageSince(7)} kcal", Modifier.weight(1f))
-                        StatCard("30 gün ort.", "${state.averageSince(30)} kcal", Modifier.weight(1f))
-                    }
-                }
+                if (state.loading || state.barcodeLoading || state.accountDeleting) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                item { Text(state.email, style = MaterialTheme.typography.labelMedium); Spacer(Modifier.height(8.dp)); SummaryCard(state) { showGoalDialog = true } }
+                item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatCard("7 gün ort.", "${state.averageSince(7)} kcal", Modifier.weight(1f)); StatCard("30 gün ort.", "${state.averageSince(30)} kcal", Modifier.weight(1f)) } }
                 item { MonthSummaryCard(state) }
                 item { SevenDayCard(state) }
-                item {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { editingEntry = null; showFoodDialog = true }, modifier = Modifier.weight(1f)) { Text("Yemek ekle") }
-                        OutlinedButton(onClick = { showWeightDialog = true }, modifier = Modifier.weight(1f)) { Text("Kilo ekle") }
-                    }
-                }
-                item {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(
-                            enabled = !state.barcodeLoading,
-                            onClick = {
-                                barcodeScanner.startScan()
-                                    .addOnSuccessListener { barcode -> barcode.rawValue?.let(vm::lookupBarcode) }
-                                    .addOnFailureListener { showManualBarcode = true }
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Barkod tara") }
-                        OutlinedButton(onClick = { showManualBarcode = true }, modifier = Modifier.weight(1f)) { Text("Barkod yaz") }
-                    }
-                }
+                if (state.recentFoods.isNotEmpty()) item { RecentFoodsCard(state.recentFoods, vm::addRecentFood) }
+                item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(onClick = { editingEntry = null; showFoodDialog = true }, modifier = Modifier.weight(1f)) { Text("Yemek ekle") }; OutlinedButton(onClick = { showWeightDialog = true }, modifier = Modifier.weight(1f)) { Text("Kilo ekle") } } }
+                item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { FilledTonalButton(enabled = !state.barcodeLoading, onClick = { barcodeScanner.startScan().addOnSuccessListener { it.rawValue?.let(vm::lookupBarcode) }.addOnFailureListener { showManualBarcode = true } }, modifier = Modifier.weight(1f)) { Text("Barkod tara") }; OutlinedButton(onClick = { showManualBarcode = true }, modifier = Modifier.weight(1f)) { Text("Barkod yaz") } } }
                 item { Text("Bugünkü kayıtlar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-                if (state.todayEntries.isEmpty()) item { Text("Henüz yemek kaydı yok.") }
-                else items(state.todayEntries, key = { it.id }) { entry ->
-                    EntryRow(entry, onEdit = { editingEntry = entry; showFoodDialog = true }, onDelete = { pendingDeleteEntry = entry })
-                }
+                if (state.todayEntries.isEmpty()) item { Text("Henüz yemek kaydı yok.") } else items(state.todayEntries, key = { it.id }) { entry -> EntryRow(entry, onEdit = { editingEntry = entry; showFoodDialog = true }, onDelete = { pendingDeleteEntry = entry }) }
                 item { Text("Son 30 gün geçmişi", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-                items(state.entries.filter { runCatching { LocalDate.parse(it.dateText()) >= LocalDate.now().minusDays(29) }.getOrDefault(false) }.take(40), key = { "history-${it.id}" }) { entry ->
-                    EntryRow(entry, showDate = true, onEdit = { editingEntry = entry; showFoodDialog = true }, onDelete = { pendingDeleteEntry = entry })
-                }
+                items(state.entries.filter { runCatching { LocalDate.parse(it.dateText()) >= LocalDate.now().minusDays(29) }.getOrDefault(false) }.take(40), key = { "history-${it.id}" }) { entry -> EntryRow(entry, true, { editingEntry = entry; showFoodDialog = true }, { pendingDeleteEntry = entry }) }
                 item { Text("Kilo geçmişi", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-                if (state.weights.isEmpty()) item { Text("Henüz kilo kaydı yok.") }
-                else items(state.weights.take(20), key = { it.id }) { w ->
-                    ListItem(
-                        headlineContent = { Text("${w.weightKg} kg") },
-                        supportingContent = { Text(w.dateText()) },
-                        trailingContent = { TextButton(onClick = { pendingDeleteWeight = w }) { Text("Sil") } }
-                    )
-                }
+                if (state.weights.isEmpty()) item { Text("Henüz kilo kaydı yok.") } else items(state.weights.take(20), key = { it.id }) { w -> ListItem(headlineContent = { Text("${w.weightKg} kg") }, supportingContent = { Text(w.dateText()) }, trailingContent = { TextButton(onClick = { pendingDeleteWeight = w }) { Text("Sil") } }) }
+                item { HorizontalDivider(); TextButton(enabled = !state.accountDeleting, onClick = { showDeleteAccount = true }, modifier = Modifier.fillMaxWidth()) { Text("Hesabımı ve verilerimi sil") } }
             }
         }
     }
 
-    if (showFoodDialog) {
-        FoodDialog(initial = editingEntry, onDismiss = { showFoodDialog = false; editingEntry = null }) { a, b, c, d, e, f, g ->
-            val edit = editingEntry
-            if (edit == null) vm.addFood(a, b, c, d, e, f, g) else vm.updateFood(edit, a, b, c, d, e, f, g)
-            showFoodDialog = false
-            editingEntry = null
-        }
-    }
-
-    if (showManualBarcode) {
-        BarcodeNumberDialog(
-            onDismiss = { showManualBarcode = false },
-            onSearch = { vm.lookupBarcode(it); showManualBarcode = false }
-        )
-    }
-
-    state.barcodeProduct?.let { product ->
-        BarcodeProductDialog(
-            product = product,
-            onDismiss = vm::clearBarcodeProduct,
-            onSave = { meal, grams -> vm.addBarcodeFood(product, meal, grams) }
-        )
-    }
-
+    if (showFoodDialog) FoodDialog(editingEntry, { showFoodDialog = false; editingEntry = null }) { a,b,c,d,e,f,g -> val edit = editingEntry; if (edit == null) vm.addFood(a,b,c,d,e,f,g) else vm.updateFood(edit,a,b,c,d,e,f,g); showFoodDialog = false; editingEntry = null }
+    if (showManualBarcode) BarcodeNumberDialog({ showManualBarcode = false }) { vm.lookupBarcode(it); showManualBarcode = false }
+    state.barcodeProduct?.let { product -> BarcodeProductDialog(product, vm::clearBarcodeProduct) { meal, grams -> vm.addBarcodeFood(product, meal, grams) } }
     if (showWeightDialog) NumberDialog("Kilo ekle", "kg", { showWeightDialog = false }) { vm.addWeight(it); showWeightDialog = false }
     if (showGoalDialog) NumberDialog("Günlük kalori hedefi", "kcal", { showGoalDialog = false }) { vm.updateGoal(it.toInt()); showGoalDialog = false }
-
-    pendingDeleteEntry?.let { entry ->
-        ConfirmDeleteDialog("Yemek kaydı silinsin mi?", entry.foodName, { pendingDeleteEntry = null }) { vm.deleteFood(entry.id); pendingDeleteEntry = null }
-    }
-    pendingDeleteWeight?.let { weight ->
-        ConfirmDeleteDialog("Kilo kaydı silinsin mi?", "${weight.weightKg} kg • ${weight.dateText()}", { pendingDeleteWeight = null }) { vm.deleteWeight(weight.id); pendingDeleteWeight = null }
-    }
+    pendingDeleteEntry?.let { entry -> ConfirmDeleteDialog("Yemek kaydı silinsin mi?", entry.foodName, { pendingDeleteEntry = null }) { vm.deleteFood(entry.id); pendingDeleteEntry = null } }
+    pendingDeleteWeight?.let { weight -> ConfirmDeleteDialog("Kilo kaydı silinsin mi?", "${weight.weightKg} kg • ${weight.dateText()}", { pendingDeleteWeight = null }) { vm.deleteWeight(weight.id); pendingDeleteWeight = null } }
+    if (showDeleteAccount) AlertDialog(onDismissRequest = { showDeleteAccount = false }, title = { Text("Hesabı kalıcı olarak sil?") }, text = { Text("Kalori, makro, kilo ve hedef kayıtların ile Kalori Takip hesabın kalıcı olarak silinecek. Bu işlem geri alınamaz.") }, confirmButton = { Button(onClick = { showDeleteAccount = false; vm.deleteAccount() }) { Text("Kalıcı olarak sil") } }, dismissButton = { TextButton(onClick = { showDeleteAccount = false }) { Text("Vazgeç") } })
 }
 
-@Composable
-private fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier) { Column(Modifier.padding(12.dp)) { Text(title, style = MaterialTheme.typography.labelMedium); Text(value, fontWeight = FontWeight.Bold) } }
-}
+@Composable private fun StatCard(title: String, value: String, modifier: Modifier = Modifier) { Card(modifier) { Column(Modifier.padding(12.dp)) { Text(title, style = MaterialTheme.typography.labelMedium); Text(value, fontWeight = FontWeight.Bold) } } }
 
-@Composable
-private fun SummaryCard(state: TrackerUiState, onGoalClick: () -> Unit) {
+@Composable private fun SummaryCard(state: TrackerUiState, onGoalClick: () -> Unit) {
     val remaining = (state.calorieGoal - state.caloriesToday).coerceAtLeast(0.0)
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Bugün", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("${state.caloriesToday.toInt()} / ${state.calorieGoal} kcal")
-            LinearProgressIndicator(progress = { (state.caloriesToday / state.calorieGoal.coerceAtLeast(1)).toFloat().coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-            Text("Kalan: ${remaining.toInt()} kcal")
-            Text("Protein ${state.proteinToday.toInt()} g • Karb ${state.carbsToday.toInt()} g • Yağ ${state.fatToday.toInt()} g")
-            TextButton(onClick = onGoalClick) { Text("Hedefi değiştir") }
-        }
-    }
+    Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Bugün", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text("${state.caloriesToday.toInt()} / ${state.calorieGoal} kcal"); LinearProgressIndicator(progress = { (state.caloriesToday / state.calorieGoal.coerceAtLeast(1)).toFloat().coerceIn(0f,1f) }, modifier = Modifier.fillMaxWidth()); Text("Kalan: ${remaining.toInt()} kcal"); Text("Protein ${state.proteinToday.toInt()} g • Karb ${state.carbsToday.toInt()} g • Yağ ${state.fatToday.toInt()} g"); TextButton(onClick = onGoalClick) { Text("Hedefi değiştir") } } }
 }
 
-@Composable
-private fun MonthSummaryCard(state: TrackerUiState) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("Bu ay", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text("Toplam ${state.monthCalories.toInt()} kcal")
-            Text("Günlük ortalama ${state.monthAverage} kcal")
-        }
-    }
+@Composable private fun MonthSummaryCard(state: TrackerUiState) { Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("Bu ay", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); Text("Toplam ${state.monthCalories.toInt()} kcal"); Text("Günlük ortalama ${state.monthAverage} kcal") } } }
+
+@Composable private fun SevenDayCard(state: TrackerUiState) {
+    val formatter = remember { DateTimeFormatter.ofPattern("EEE d MMM", Locale("tr","TR")) }
+    Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Son 7 gün", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); state.dailyTotals(7).forEach { day -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text(day.date.format(formatter), modifier = Modifier.width(90.dp), style = MaterialTheme.typography.bodySmall); LinearProgressIndicator(progress = { (day.calories / state.calorieGoal.coerceAtLeast(1)).toFloat().coerceIn(0f,1f) }, modifier = Modifier.weight(1f)); Spacer(Modifier.width(8.dp)); Text("${day.calories.toInt()}", style = MaterialTheme.typography.bodySmall) } } } }
 }
 
-@Composable
-private fun SevenDayCard(state: TrackerUiState) {
-    val formatter = remember { DateTimeFormatter.ofPattern("EEE d MMM", Locale("tr", "TR")) }
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Son 7 gün", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            state.dailyTotals(7).forEach { day ->
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(day.date.format(formatter), modifier = Modifier.width(90.dp), style = MaterialTheme.typography.bodySmall)
-                    LinearProgressIndicator(
-                        progress = { (day.calories / state.calorieGoal.coerceAtLeast(1)).toFloat().coerceIn(0f, 1f) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("${day.calories.toInt()}", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-    }
+@Composable private fun RecentFoodsCard(foods: List<CalorieEntry>, onAdd: (CalorieEntry) -> Unit) {
+    Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { Text("Son kullanılanlar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold); foods.forEach { food -> Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(food.foodName); Text("${food.grams.toInt()} g • ${food.calories.toInt()} kcal", style = MaterialTheme.typography.bodySmall) }; TextButton(onClick = { onAdd(food) }) { Text("Tekrar ekle") } } } } }
 }
 
-@Composable
-private fun EntryRow(entry: CalorieEntry, showDate: Boolean = false, onEdit: () -> Unit, onDelete: () -> Unit) {
-    ListItem(
-        headlineContent = { Text(entry.foodName) },
-        supportingContent = { Text((if (showDate) "${entry.dateText()} • " else "") + "${entry.mealType} • ${entry.grams.toInt()} g • P ${entry.proteinG.toInt()} / K ${entry.carbsG.toInt()} / Y ${entry.fatG.toInt()}") },
-        trailingContent = {
-            Column(horizontalAlignment = Alignment.End) {
-                Text("${entry.calories.toInt()} kcal")
-                Row {
-                    TextButton(onClick = onEdit, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("Düzenle") }
-                    TextButton(onClick = onDelete, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("Sil") }
-                }
-            }
-        }
-    )
+@Composable private fun EntryRow(entry: CalorieEntry, showDate: Boolean = false, onEdit: () -> Unit, onDelete: () -> Unit) { ListItem(headlineContent = { Text(entry.foodName) }, supportingContent = { Text((if (showDate) "${entry.dateText()} • " else "") + "${entry.mealType} • ${entry.grams.toInt()} g • P ${entry.proteinG.toInt()} / K ${entry.carbsG.toInt()} / Y ${entry.fatG.toInt()}") }, trailingContent = { Column(horizontalAlignment = Alignment.End) { Text("${entry.calories.toInt()} kcal"); Row { TextButton(onClick = onEdit, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("Düzenle") }; TextButton(onClick = onDelete, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("Sil") } } } }) }
+
+@Composable private fun FoodDialog(initial: CalorieEntry? = null, onDismiss: () -> Unit, onSave: (String,String,Double,Double,Double,Double,Double) -> Unit) {
+    var name by remember(initial?.id) { mutableStateOf(initial?.foodName.orEmpty()) }; var meal by remember(initial?.id) { mutableStateOf(initial?.mealType ?: "Öğün") }; var grams by remember(initial?.id) { mutableStateOf(initial?.grams?.toString().orEmpty()) }; var calories by remember(initial?.id) { mutableStateOf(initial?.calories?.toString().orEmpty()) }; var protein by remember(initial?.id) { mutableStateOf(initial?.proteinG?.toString().orEmpty()) }; var carbs by remember(initial?.id) { mutableStateOf(initial?.carbsG?.toString().orEmpty()) }; var fat by remember(initial?.id) { mutableStateOf(initial?.fatG?.toString().orEmpty()) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (initial == null) "Yemek ekle" else "Yemek düzenle") }, text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { OutlinedTextField(name,{name=it},label={Text("Yemek")},singleLine=true); OutlinedTextField(meal,{meal=it},label={Text("Öğün")},singleLine=true); OutlinedTextField(grams,{grams=it},label={Text("Gram")},singleLine=true); OutlinedTextField(calories,{calories=it},label={Text("Kalori")},singleLine=true); OutlinedTextField(protein,{protein=it},label={Text("Protein g")},singleLine=true); OutlinedTextField(carbs,{carbs=it},label={Text("Karbonhidrat g")},singleLine=true); OutlinedTextField(fat,{fat=it},label={Text("Yağ g")},singleLine=true) } }, confirmButton = { Button(enabled = name.isNotBlank() && grams.toDoubleOrNull()!=null && calories.toDoubleOrNull()!=null, onClick = { onSave(name,meal,grams.toDoubleOrNull()?:0.0,calories.toDoubleOrNull()?:0.0,protein.toDoubleOrNull()?:0.0,carbs.toDoubleOrNull()?:0.0,fat.toDoubleOrNull()?:0.0) }) { Text(if (initial == null) "Kaydet" else "Güncelle") } }, dismissButton = { TextButton(onClick=onDismiss){Text("İptal")} })
 }
 
-@Composable
-private fun FoodDialog(initial: CalorieEntry? = null, onDismiss: () -> Unit, onSave: (String, String, Double, Double, Double, Double, Double) -> Unit) {
-    var name by remember(initial?.id) { mutableStateOf(initial?.foodName.orEmpty()) }
-    var meal by remember(initial?.id) { mutableStateOf(initial?.mealType ?: "Öğün") }
-    var grams by remember(initial?.id) { mutableStateOf(initial?.grams?.toString().orEmpty()) }
-    var calories by remember(initial?.id) { mutableStateOf(initial?.calories?.toString().orEmpty()) }
-    var protein by remember(initial?.id) { mutableStateOf(initial?.proteinG?.toString().orEmpty()) }
-    var carbs by remember(initial?.id) { mutableStateOf(initial?.carbsG?.toString().orEmpty()) }
-    var fat by remember(initial?.id) { mutableStateOf(initial?.fatG?.toString().orEmpty()) }
+@Composable private fun BarcodeNumberDialog(onDismiss: () -> Unit, onSearch: (String) -> Unit) { var barcode by remember { mutableStateOf("") }; AlertDialog(onDismissRequest=onDismiss,title={Text("Barkod numarası")},text={OutlinedTextField(barcode,{barcode=it.filter(Char::isDigit)},label={Text("EAN / UPC")},singleLine=true)},confirmButton={Button(enabled=barcode.length in 8..14,onClick={onSearch(barcode)}){Text("Ürünü bul")}},dismissButton={TextButton(onClick=onDismiss){Text("İptal")}}) }
 
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (initial == null) "Yemek ekle" else "Yemek düzenle") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(name, { name = it }, label = { Text("Yemek") }, singleLine = true)
-            OutlinedTextField(meal, { meal = it }, label = { Text("Öğün") }, singleLine = true)
-            OutlinedTextField(grams, { grams = it }, label = { Text("Gram") }, singleLine = true)
-            OutlinedTextField(calories, { calories = it }, label = { Text("Kalori") }, singleLine = true)
-            OutlinedTextField(protein, { protein = it }, label = { Text("Protein g") }, singleLine = true)
-            OutlinedTextField(carbs, { carbs = it }, label = { Text("Karbonhidrat g") }, singleLine = true)
-            OutlinedTextField(fat, { fat = it }, label = { Text("Yağ g") }, singleLine = true)
-        }
-    }, confirmButton = {
-        Button(enabled = name.isNotBlank() && grams.toDoubleOrNull() != null && calories.toDoubleOrNull() != null, onClick = {
-            onSave(name, meal, grams.toDoubleOrNull() ?: 0.0, calories.toDoubleOrNull() ?: 0.0, protein.toDoubleOrNull() ?: 0.0, carbs.toDoubleOrNull() ?: 0.0, fat.toDoubleOrNull() ?: 0.0)
-        }) { Text(if (initial == null) "Kaydet" else "Güncelle") }
-    }, dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } })
-}
+@Composable private fun BarcodeProductDialog(product: BarcodeProduct, onDismiss: () -> Unit, onSave: (String,Double) -> Unit) { var meal by remember(product.barcode){mutableStateOf("Öğün")}; var grams by remember(product.barcode){mutableStateOf("100")}; val g=grams.toDoubleOrNull()?:0.0; val ratio=g/100.0; AlertDialog(onDismissRequest=onDismiss,title={Text(product.name)},text={Column(verticalArrangement=Arrangement.spacedBy(8.dp)){if(product.brand.isNotBlank())Text(product.brand,style=MaterialTheme.typography.labelMedium);Text("100 g: ${product.calories100g.toInt()} kcal • P ${product.protein100g.toInt()} • K ${product.carbs100g.toInt()} • Y ${product.fat100g.toInt()}");OutlinedTextField(meal,{meal=it},label={Text("Öğün")},singleLine=true);OutlinedTextField(grams,{grams=it},label={Text("Gram")},singleLine=true);Text("Eklenecek: ${(product.calories100g*ratio).toInt()} kcal")}},confirmButton={Button(enabled=g>0,onClick={onSave(meal,g)}){Text("Günlüğe ekle")}},dismissButton={TextButton(onClick=onDismiss){Text("İptal")}}) }
 
-@Composable
-private fun BarcodeNumberDialog(onDismiss: () -> Unit, onSearch: (String) -> Unit) {
-    var barcode by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Barkod numarası") },
-        text = { OutlinedTextField(barcode, { barcode = it.filter(Char::isDigit) }, label = { Text("EAN / UPC") }, singleLine = true) },
-        confirmButton = { Button(enabled = barcode.length in 8..14, onClick = { onSearch(barcode) }) { Text("Ürünü bul") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } }
-    )
-}
+@Composable private fun ConfirmDeleteDialog(title:String,detail:String,onDismiss:()->Unit,onConfirm:()->Unit){AlertDialog(onDismissRequest=onDismiss,title={Text(title)},text={Text(detail)},confirmButton={Button(onClick=onConfirm){Text("Sil")}},dismissButton={TextButton(onClick=onDismiss){Text("Vazgeç")}})}
 
-@Composable
-private fun BarcodeProductDialog(product: BarcodeProduct, onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
-    var meal by remember(product.barcode) { mutableStateOf("Öğün") }
-    var grams by remember(product.barcode) { mutableStateOf("100") }
-    val g = grams.toDoubleOrNull() ?: 0.0
-    val ratio = g / 100.0
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(product.name) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (product.brand.isNotBlank()) Text(product.brand, style = MaterialTheme.typography.labelMedium)
-                Text("100 g: ${product.calories100g.toInt()} kcal • P ${product.protein100g.toInt()} • K ${product.carbs100g.toInt()} • Y ${product.fat100g.toInt()}")
-                OutlinedTextField(meal, { meal = it }, label = { Text("Öğün") }, singleLine = true)
-                OutlinedTextField(grams, { grams = it }, label = { Text("Gram") }, singleLine = true)
-                Text("Eklenecek: ${(product.calories100g * ratio).toInt()} kcal")
-            }
-        },
-        confirmButton = { Button(enabled = g > 0, onClick = { onSave(meal, g) }) { Text("Günlüğe ekle") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } }
-    )
-}
-
-@Composable
-private fun ConfirmDeleteDialog(title: String, detail: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(detail) },
-        confirmButton = { Button(onClick = onConfirm) { Text("Sil") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } }
-    )
-}
-
-@Composable
-private fun NumberDialog(title: String, suffix: String, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
-    var value by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { OutlinedTextField(value, { value = it }, label = { Text(suffix) }, singleLine = true) },
-        confirmButton = { Button(enabled = value.toDoubleOrNull() != null, onClick = { value.toDoubleOrNull()?.let(onSave) }) { Text("Kaydet") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } }
-    )
-}
+@Composable private fun NumberDialog(title:String,suffix:String,onDismiss:()->Unit,onSave:(Double)->Unit){var value by remember{mutableStateOf("")};AlertDialog(onDismissRequest=onDismiss,title={Text(title)},text={OutlinedTextField(value,{value=it},label={Text(suffix)},singleLine=true)},confirmButton={Button(enabled=value.toDoubleOrNull()!=null,onClick={value.toDoubleOrNull()?.let(onSave)}){Text("Kaydet")}},dismissButton={TextButton(onClick=onDismiss){Text("İptal")}})}
