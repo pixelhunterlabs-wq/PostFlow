@@ -34,8 +34,32 @@ jobs:
           echo "SUPABASE_URL=https://example.supabase.co" >> local.properties
           echo "SUPABASE_KEY=sb_publishable_ci_placeholder" >> local.properties
 
+      - name: Configure optional Play upload signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.CALORIE_UPLOAD_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.CALORIE_UPLOAD_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.CALORIE_UPLOAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.CALORIE_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            KEYSTORE_PATH="$RUNNER_TEMP/calorie-upload-keystore.jks"
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+            echo "CALORIE_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+            echo "CALORIE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "CALORIE_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "CALORIE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "CALORIE_SIGNING_CONFIGURED=true" >> "$GITHUB_ENV"
+          else
+            echo "CALORIE_SIGNING_CONFIGURED=false" >> "$GITHUB_ENV"
+            echo "Upload signing secrets are not configured; building an unsigned release candidate."
+          fi
+
       - name: Build release AAB
         run: gradle -p apps/calorie-tracker bundleRelease --stacktrace
+
+      - name: Verify signed AAB
+        if: env.CALORIE_SIGNING_CONFIGURED == 'true'
+        run: jarsigner -verify -verbose -certs apps/calorie-tracker/app/build/outputs/bundle/release/app-release.aab
 
       - name: Upload release candidate AAB
         if: success()
