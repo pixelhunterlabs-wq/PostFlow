@@ -14,6 +14,12 @@ val localProps = Properties().apply {
 val defaultSupabaseUrl = "https://jecbdzkunqwgpzbiwdak.supabase.co"
 val defaultSupabasePublishableKey = "sb_publishable_LggEu5U2E1Wg-lp1b2ih3g_tNpSfrIG"
 
+val releaseStoreFile = System.getenv("CALORIE_KEYSTORE_PATH")
+val releaseStorePassword = System.getenv("CALORIE_KEYSTORE_PASSWORD")
+val releaseKeyAlias = System.getenv("CALORIE_KEY_ALIAS")
+val releaseKeyPassword = System.getenv("CALORIE_KEY_PASSWORD")
+val releaseSigningReady = listOf(releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.pixelhunter.calorietracker"
     compileSdk = 37
@@ -29,6 +35,25 @@ android {
         val supabaseKey = localProps.getProperty("SUPABASE_KEY", defaultSupabasePublishableKey)
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_KEY", "\"$supabaseKey\"")
+    }
+
+    if (releaseSigningReady) {
+        signingConfigs {
+            create("releaseUpload") {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            if (releaseSigningReady) {
+                signingConfig = signingConfigs.getByName("releaseUpload")
+            }
+        }
     }
 
     buildFeatures {
