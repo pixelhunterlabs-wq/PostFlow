@@ -12,11 +12,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.gms.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.android.gms.mlkit.vision.codescanner.GmsBarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.auth
@@ -25,9 +29,14 @@ import io.github.jan.supabase.auth.providers.Google
 import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.from
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import java.net.HttpURLConnection
+import java.net.URL
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -72,6 +81,37 @@ data class WeightEntry(
     fun dateText(): String = measuredAt.take(10)
 }
 
+@Serializable
+private data class OffResponse(
+    val status: Int = 0,
+    val product: OffProduct? = null
+)
+
+@Serializable
+private data class OffProduct(
+    @SerialName("product_name") val productName: String? = null,
+    val brands: String? = null,
+    val nutriments: OffNutriments? = null
+)
+
+@Serializable
+private data class OffNutriments(
+    @SerialName("energy-kcal_100g") val calories100g: Double? = null,
+    @SerialName("proteins_100g") val protein100g: Double? = null,
+    @SerialName("carbohydrates_100g") val carbs100g: Double? = null,
+    @SerialName("fat_100g") val fat100g: Double? = null
+)
+
+data class BarcodeProduct(
+    val barcode: String,
+    val name: String,
+    val brand: String,
+    val calories100g: Double,
+    val protein100g: Double,
+    val carbs100g: Double,
+    val fat100g: Double
+)
+
 data class DailyTotal(val date: LocalDate, val calories: Double)
 
 object SupabaseProvider {
@@ -96,6 +136,8 @@ data class TrackerUiState(
     val calorieGoal: Int = 2000,
     val entries: List<CalorieEntry> = emptyList(),
     val weights: List<WeightEntry> = emptyList(),
+    val barcodeLoading: Boolean = false,
+    val barcodeProduct: BarcodeProduct? = null,
     val message: String? = null
 ) {
     private val today = LocalDate.now()
@@ -136,11 +178,16 @@ class TrackerViewModel : ViewModel() {
         private set
 
     private val supabase get() = SupabaseProvider.client
+    private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     init { refreshSessionAndData() }
 
     fun consumeMessage() {
         uiState = uiState.copy(message = null)
+    }
+
+    fun clearBarcodeProduct() {
+        uiState = uiState.copy(barcodeProduct = null)
     }
 
     fun refreshSessionAndData() {
@@ -180,12 +227,13 @@ class TrackerViewModel : ViewModel() {
 
     private suspend fun ensureProfile(userId: String, email: String) {
         val client = supabase ?: return
-        val profiles = client.from("calorie_profiles").select().decodeList<CalorieProfile>()
-        val current = profiles.firstOrNull()
+        val current = client.from("calorie_profiles").select().decodeList<CalorieProfile>().firstOrNull()
         if (current == null) {
             client.from("calorie_profiles").insert(CalorieProfile(userId = userId, email = email, dailyCalorieTarget = 2000))
             uiState = uiState.copy(calorieGoal = 2000)
-        } else uiState = uiState.copy(calorieGoal = current.dailyCalorieTarget ?: 2000)
+        } else {
+            uiState = uiState.copy(calorieGoal = current.dailyCalorieTarget ?: 2000)
+        }
     }
 
     private suspend fun loadAll() {
@@ -195,7 +243,74 @@ class TrackerViewModel : ViewModel() {
         uiState = uiState.copy(entries = entries, weights = weights, loading = false)
     }
 
-    fun addFood(name: String, meal: String, grams: Double, calories: Double, protein: Double, carbs: Double, fat: Double) {
+    fun lookupBarcode(barcode: String) {
+        val clean = barcode.filter(Char::isDigit)
+        if (clean.length !in 8..14) {
+            uiState = uiState.copy(message = "Geçerli bir ürün barkodu okunamadı")
+            return
+        }
+        viewModelScope.launch {
+            uiState = uiState.copy(barcodeLoading = true, barcodeProduct = null)
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val fields = "product_name,brands,nutriments"
+                    val url = URL("https://world.openfoodfacts.org/api/v2/product/$clean.json?fields=$fields")
+                    val connection = (url.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 10_000
+                        readTimeout = 10_000
+                        setRequestProperty("Accept", "application/json")
+                        setRequestProperty("User-Agent", "KaloriTakip-Android/1.0 barcode-scan")
+                    }
+                    try {
+                        if (connection.responseCode !in 200..299) error("Ürün servisine ulaşılamadı")
+                        json.decodeFromString<OffResponse>(connection.inputStream.bufferedReader().use { it.readText() })
+                    } finally {
+                        connection.disconnect()
+                    }
+                }
+            }.onSuccess { response ->
+                val product = response.product
+                val nutrients = product?.nutriments
+                if (response.status != 1 || product == null) {
+                    uiState = uiState.copy(barcodeLoading = false, message = "Ürün Open Food Facts veritabanında bulunamadı")
+                    return@onSuccess
+                }
+                val name = product.productName?.trim().orEmpty().ifBlank { product.brands?.trim().orEmpty() }.ifBlank { "Barkodlu ürün" }
+                uiState = uiState.copy(
+                    barcodeLoading = false,
+                    barcodeProduct = BarcodeProduct(
+                        barcode = clean,
+                        name = name,
+                        brand = product.brands.orEmpty(),
+                        calories100g = nutrients?.calories100g ?: 0.0,
+                        protein100g = nutrients?.protein100g ?: 0.0,
+                        carbs100g = nutrients?.carbs100g ?: 0.0,
+                        fat100g = nutrients?.fat100g ?: 0.0
+                    )
+                )
+            }.onFailure {
+                uiState = uiState.copy(barcodeLoading = false, message = it.message ?: "Barkod ürünü alınamadı")
+            }
+        }
+    }
+
+    fun addBarcodeFood(product: BarcodeProduct, meal: String, grams: Double) {
+        val ratio = grams / 100.0
+        addFood(
+            name = product.name,
+            meal = meal,
+            grams = grams,
+            calories = product.calories100g * ratio,
+            protein = product.protein100g * ratio,
+            carbs = product.carbs100g * ratio,
+            fat = product.fat100g * ratio,
+            source = "open_food_facts:${product.barcode}"
+        )
+        clearBarcodeProduct()
+    }
+
+    fun addFood(name: String, meal: String, grams: Double, calories: Double, protein: Double, carbs: Double, fat: Double, source: String = "manual") {
         val client = supabase ?: return
         viewModelScope.launch {
             val user = client.auth.currentUserOrNull() ?: return@launch
@@ -209,7 +324,8 @@ class TrackerViewModel : ViewModel() {
                         calories = calories,
                         proteinG = protein,
                         carbsG = carbs,
-                        fatG = fat
+                        fatG = fat,
+                        source = source
                     )
                 )
                 loadAll()
@@ -230,9 +346,7 @@ class TrackerViewModel : ViewModel() {
                     set("protein_g", protein)
                     set("carbs_g", carbs)
                     set("fat_g", fat)
-                }) {
-                    filter { eq("id", entry.id) }
-                }
+                }) { filter { eq("id", entry.id) } }
                 loadAll()
                 uiState = uiState.copy(message = "Yemek kaydı güncellendi")
             }.onFailure { uiState = uiState.copy(message = it.message ?: "Yemek güncellenemedi") }
@@ -243,9 +357,7 @@ class TrackerViewModel : ViewModel() {
         val client = supabase ?: return
         viewModelScope.launch {
             runCatching {
-                client.from("calorie_food_entries").delete {
-                    filter { eq("id", entryId) }
-                }
+                client.from("calorie_food_entries").delete { filter { eq("id", entryId) } }
                 loadAll()
                 uiState = uiState.copy(message = "Yemek kaydı silindi")
             }.onFailure { uiState = uiState.copy(message = it.message ?: "Yemek silinemedi") }
@@ -268,9 +380,7 @@ class TrackerViewModel : ViewModel() {
         val client = supabase ?: return
         viewModelScope.launch {
             runCatching {
-                client.from("calorie_weight_entries").delete {
-                    filter { eq("id", entryId) }
-                }
+                client.from("calorie_weight_entries").delete { filter { eq("id", entryId) } }
                 loadAll()
                 uiState = uiState.copy(message = "Kilo kaydı silindi")
             }.onFailure { uiState = uiState.copy(message = it.message ?: "Kilo kaydı silinemedi") }
@@ -313,6 +423,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun TrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()) {
     val state = vm.uiState
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     var showFoodDialog by remember { mutableStateOf(false) }
     var editingEntry by remember { mutableStateOf<CalorieEntry?>(null) }
@@ -320,11 +431,17 @@ fun TrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()) {
     var showWeightDialog by remember { mutableStateOf(false) }
     var pendingDeleteWeight by remember { mutableStateOf<WeightEntry?>(null) }
     var showGoalDialog by remember { mutableStateOf(false) }
+    var showManualBarcode by remember { mutableStateOf(false) }
 
-    LaunchedEffect(authRefreshKey) {
-        vm.refreshSessionAndData()
+    val scannerOptions = remember {
+        GmsBarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_EAN_13, Barcode.FORMAT_EAN_8, Barcode.FORMAT_UPC_A, Barcode.FORMAT_UPC_E)
+            .enableAutoZoom()
+            .build()
     }
+    val barcodeScanner = remember(context) { GmsBarcodeScanning.getClient(context, scannerOptions) }
 
+    LaunchedEffect(authRefreshKey) { vm.refreshSessionAndData() }
     LaunchedEffect(state.message) {
         state.message?.let {
             snackbarHostState.showSnackbar(it)
@@ -353,7 +470,7 @@ fun TrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()) {
                 Button(onClick = vm::signInWithGoogle) { Text("Google ile devam et") }
             }
             else -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                if (state.loading || state.barcodeLoading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
                 item {
                     Text(state.email, style = MaterialTheme.typography.labelMedium)
                     Spacer(Modifier.height(8.dp))
@@ -371,6 +488,20 @@ fun TrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { editingEntry = null; showFoodDialog = true }, modifier = Modifier.weight(1f)) { Text("Yemek ekle") }
                         OutlinedButton(onClick = { showWeightDialog = true }, modifier = Modifier.weight(1f)) { Text("Kilo ekle") }
+                    }
+                }
+                item {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(
+                            enabled = !state.barcodeLoading,
+                            onClick = {
+                                barcodeScanner.startScan()
+                                    .addOnSuccessListener { barcode -> barcode.rawValue?.let(vm::lookupBarcode) }
+                                    .addOnFailureListener { showManualBarcode = true }
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Barkod tara") }
+                        OutlinedButton(onClick = { showManualBarcode = true }, modifier = Modifier.weight(1f)) { Text("Barkod yaz") }
                     }
                 }
                 item { Text("Bugünkü kayıtlar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
@@ -402,6 +533,21 @@ fun TrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()) {
             showFoodDialog = false
             editingEntry = null
         }
+    }
+
+    if (showManualBarcode) {
+        BarcodeNumberDialog(
+            onDismiss = { showManualBarcode = false },
+            onSearch = { vm.lookupBarcode(it); showManualBarcode = false }
+        )
+    }
+
+    state.barcodeProduct?.let { product ->
+        BarcodeProductDialog(
+            product = product,
+            onDismiss = vm::clearBarcodeProduct,
+            onSave = { meal, grams -> vm.addBarcodeFood(product, meal, grams) }
+        )
     }
 
     if (showWeightDialog) NumberDialog("Kilo ekle", "kg", { showWeightDialog = false }) { vm.addWeight(it); showWeightDialog = false }
@@ -509,6 +655,41 @@ private fun FoodDialog(initial: CalorieEntry? = null, onDismiss: () -> Unit, onS
             onSave(name, meal, grams.toDoubleOrNull() ?: 0.0, calories.toDoubleOrNull() ?: 0.0, protein.toDoubleOrNull() ?: 0.0, carbs.toDoubleOrNull() ?: 0.0, fat.toDoubleOrNull() ?: 0.0)
         }) { Text(if (initial == null) "Kaydet" else "Güncelle") }
     }, dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } })
+}
+
+@Composable
+private fun BarcodeNumberDialog(onDismiss: () -> Unit, onSearch: (String) -> Unit) {
+    var barcode by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Barkod numarası") },
+        text = { OutlinedTextField(barcode, { barcode = it.filter(Char::isDigit) }, label = { Text("EAN / UPC") }, singleLine = true) },
+        confirmButton = { Button(enabled = barcode.length in 8..14, onClick = { onSearch(barcode) }) { Text("Ürünü bul") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } }
+    )
+}
+
+@Composable
+private fun BarcodeProductDialog(product: BarcodeProduct, onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
+    var meal by remember(product.barcode) { mutableStateOf("Öğün") }
+    var grams by remember(product.barcode) { mutableStateOf("100") }
+    val g = grams.toDoubleOrNull() ?: 0.0
+    val ratio = g / 100.0
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(product.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (product.brand.isNotBlank()) Text(product.brand, style = MaterialTheme.typography.labelMedium)
+                Text("100 g: ${product.calories100g.toInt()} kcal • P ${product.protein100g.toInt()} • K ${product.carbs100g.toInt()} • Y ${product.fat100g.toInt()}")
+                OutlinedTextField(meal, { meal = it }, label = { Text("Öğün") }, singleLine = true)
+                OutlinedTextField(grams, { grams = it }, label = { Text("Gram") }, singleLine = true)
+                Text("Eklenecek: ${(product.calories100g * ratio).toInt()} kcal")
+            }
+        },
+        confirmButton = { Button(enabled = g > 0, onClick = { onSave(meal, g) }) { Text("Günlüğe ekle") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } }
+    )
 }
 
 @Composable
