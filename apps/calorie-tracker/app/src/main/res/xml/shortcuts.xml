@@ -4,8 +4,8 @@
         android:shortcutId="privacy_policy"
         android:enabled="true"
         android:icon="@drawable/ic_launcher"
-        android:shortcutShortLabel="Gizlilik"
-        android:shortcutLongLabel="Gizlilik Politikası">
+        android:shortcutShortLabel="@string/privacy_shortcut_short"
+        android:shortcutLongLabel="@string/privacy_shortcut_long">
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.pixelhunter.calorietracker"
