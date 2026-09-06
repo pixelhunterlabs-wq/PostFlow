@@ -12,6 +12,9 @@ val localProps = Properties().apply {
     if (f.exists()) f.inputStream().use(::load)
 }
 
+val defaultSupabaseUrl = "https://jecbdzkunqwgpzbiwdak.supabase.co"
+val defaultSupabasePublishableKey = "sb_publishable_LggEu5U2E1Wg-lp1b2ih3g_tNpSfrIG"
+
 android {
     namespace = "com.pixelhunter.calorietracker"
     compileSdk = 37
@@ -23,8 +26,10 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        buildConfigField("String", "SUPABASE_URL", "\"${localProps.getProperty("SUPABASE_URL", "")}\"")
-        buildConfigField("String", "SUPABASE_KEY", "\"${localProps.getProperty("SUPABASE_KEY", "")}\"")
+        val supabaseUrl = localProps.getProperty("SUPABASE_URL", defaultSupabaseUrl)
+        val supabaseKey = localProps.getProperty("SUPABASE_KEY", defaultSupabasePublishableKey)
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_KEY", "\"$supabaseKey\"")
     }
 
     buildFeatures {
