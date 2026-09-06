@@ -118,6 +118,10 @@ class TrackerViewModel : ViewModel() {
 
     init { refreshSessionAndData() }
 
+    fun consumeMessage() {
+        uiState = uiState.copy(message = null)
+    }
+
     fun refreshSessionAndData() {
         val client = supabase ?: run {
             uiState = uiState.copy(message = "Supabase ayarları eksik. local.properties dosyasını doldurun.")
@@ -167,7 +171,7 @@ class TrackerViewModel : ViewModel() {
         val client = supabase ?: return
         val entries = client.from("calorie_food_entries").select().decodeList<CalorieEntry>().sortedByDescending { it.eatenAt }
         val weights = client.from("calorie_weight_entries").select().decodeList<WeightEntry>().sortedByDescending { it.measuredAt }
-        uiState = uiState.copy(entries = entries, weights = weights, loading = false, message = null)
+        uiState = uiState.copy(entries = entries, weights = weights, loading = false)
     }
 
     fun addFood(name: String, meal: String, grams: Double, calories: Double, protein: Double, carbs: Double, fat: Double) {
@@ -176,11 +180,54 @@ class TrackerViewModel : ViewModel() {
             val user = client.auth.currentUserOrNull() ?: return@launch
             runCatching {
                 client.from("calorie_food_entries").insert(
-                    CalorieEntry(userId = user.id, foodName = name.trim(), mealType = meal, grams = grams,
-                        calories = calories, proteinG = protein, carbsG = carbs, fatG = fat)
+                    CalorieEntry(
+                        userId = user.id,
+                        foodName = name.trim(),
+                        mealType = meal.trim().ifBlank { "Öğün" },
+                        grams = grams,
+                        calories = calories,
+                        proteinG = protein,
+                        carbsG = carbs,
+                        fatG = fat
+                    )
                 )
                 loadAll()
+                uiState = uiState.copy(message = "Yemek kaydı eklendi")
             }.onFailure { uiState = uiState.copy(message = it.message ?: "Yemek eklenemedi") }
+        }
+    }
+
+    fun updateFood(entry: CalorieEntry, name: String, meal: String, grams: Double, calories: Double, protein: Double, carbs: Double, fat: Double) {
+        val client = supabase ?: return
+        viewModelScope.launch {
+            runCatching {
+                client.from("calorie_food_entries").update({
+                    set("food_name", name.trim())
+                    set("meal_type", meal.trim().ifBlank { "Öğün" })
+                    set("grams", grams)
+                    set("calories", calories)
+                    set("protein_g", protein)
+                    set("carbs_g", carbs)
+                    set("fat_g", fat)
+                }) {
+                    filter { eq("id", entry.id) }
+                }
+                loadAll()
+                uiState = uiState.copy(message = "Yemek kaydı güncellendi")
+            }.onFailure { uiState = uiState.copy(message = it.message ?: "Yemek güncellenemedi") }
+        }
+    }
+
+    fun deleteFood(entryId: String) {
+        val client = supabase ?: return
+        viewModelScope.launch {
+            runCatching {
+                client.from("calorie_food_entries").delete {
+                    filter { eq("id", entryId) }
+                }
+                loadAll()
+                uiState = uiState.copy(message = "Yemek kaydı silindi")
+            }.onFailure { uiState = uiState.copy(message = it.message ?: "Yemek silinemedi") }
         }
     }
 
@@ -191,7 +238,21 @@ class TrackerViewModel : ViewModel() {
             runCatching {
                 client.from("calorie_weight_entries").insert(WeightEntry(userId = user.id, weightKg = weightKg))
                 loadAll()
+                uiState = uiState.copy(message = "Kilo kaydı eklendi")
             }.onFailure { uiState = uiState.copy(message = it.message ?: "Kilo kaydı eklenemedi") }
+        }
+    }
+
+    fun deleteWeight(entryId: String) {
+        val client = supabase ?: return
+        viewModelScope.launch {
+            runCatching {
+                client.from("calorie_weight_entries").delete {
+                    filter { eq("id", entryId) }
+                }
+                loadAll()
+                uiState = uiState.copy(message = "Kilo kaydı silindi")
+            }.onFailure { uiState = uiState.copy(message = it.message ?: "Kilo kaydı silinemedi") }
         }
     }
 
@@ -228,18 +289,30 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun TrackerApp(vm: TrackerViewModel = viewModel()) {
     val state = vm.uiState
+    val snackbarHostState = remember { SnackbarHostState() }
     var showFoodDialog by remember { mutableStateOf(false) }
+    var editingEntry by remember { mutableStateOf<CalorieEntry?>(null) }
+    var pendingDeleteEntry by remember { mutableStateOf<CalorieEntry?>(null) }
     var showWeightDialog by remember { mutableStateOf(false) }
+    var pendingDeleteWeight by remember { mutableStateOf<WeightEntry?>(null) }
     var showGoalDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(state.message) {
+        state.message?.let {
+            snackbarHostState.showSnackbar(it)
+            vm.consumeMessage()
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(title = { Text("Kalori Takip") }, actions = {
                 if (state.signedIn) TextButton(onClick = vm::signOut) { Text("Çıkış") }
             })
         },
         floatingActionButton = {
-            if (state.signedIn) FloatingActionButton(onClick = { showFoodDialog = true }) { Text("+") }
+            if (state.signedIn) FloatingActionButton(onClick = { editingEntry = null; showFoodDialog = true }) { Text("+") }
         }
     ) { padding ->
         when {
@@ -252,6 +325,7 @@ fun TrackerApp(vm: TrackerViewModel = viewModel()) {
                 Button(onClick = vm::signInWithGoogle) { Text("Google ile devam et") }
             }
             else -> LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
                 item {
                     Text(state.email, style = MaterialTheme.typography.labelMedium)
                     Spacer(Modifier.height(8.dp))
@@ -265,29 +339,74 @@ fun TrackerApp(vm: TrackerViewModel = viewModel()) {
                 }
                 item {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { showFoodDialog = true }, modifier = Modifier.weight(1f)) { Text("Yemek ekle") }
+                        Button(onClick = { editingEntry = null; showFoodDialog = true }, modifier = Modifier.weight(1f)) { Text("Yemek ekle") }
                         OutlinedButton(onClick = { showWeightDialog = true }, modifier = Modifier.weight(1f)) { Text("Kilo ekle") }
                     }
                 }
                 item { Text("Bugünkü kayıtlar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
                 if (state.todayEntries.isEmpty()) item { Text("Henüz yemek kaydı yok.") }
-                else items(state.todayEntries, key = { it.id }) { EntryRow(it) }
+                else items(state.todayEntries, key = { it.id }) { entry ->
+                    EntryRow(
+                        entry = entry,
+                        onEdit = { editingEntry = entry; showFoodDialog = true },
+                        onDelete = { pendingDeleteEntry = entry }
+                    )
+                }
                 item { Text("Son 30 gün geçmişi", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-                items(state.entries.filter { runCatching { LocalDate.parse(it.dateText()) >= LocalDate.now().minusDays(29) }.getOrDefault(false) }.take(40), key = { "history-${it.id}" }) { EntryRow(it, showDate = true) }
+                items(state.entries.filter { runCatching { LocalDate.parse(it.dateText()) >= LocalDate.now().minusDays(29) }.getOrDefault(false) }.take(40), key = { "history-${it.id}" }) { entry ->
+                    EntryRow(
+                        entry = entry,
+                        showDate = true,
+                        onEdit = { editingEntry = entry; showFoodDialog = true },
+                        onDelete = { pendingDeleteEntry = entry }
+                    )
+                }
                 item { Text("Kilo geçmişi", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
                 if (state.weights.isEmpty()) item { Text("Henüz kilo kaydı yok.") }
                 else items(state.weights.take(20), key = { it.id }) { w ->
-                    ListItem(headlineContent = { Text("${w.weightKg} kg") }, supportingContent = { Text(w.dateText()) })
+                    ListItem(
+                        headlineContent = { Text("${w.weightKg} kg") },
+                        supportingContent = { Text(w.dateText()) },
+                        trailingContent = { TextButton(onClick = { pendingDeleteWeight = w }) { Text("Sil") } }
+                    )
                 }
             }
         }
     }
 
-    if (showFoodDialog) FoodDialog(onDismiss = { showFoodDialog = false }) { a,b,c,d,e,f,g ->
-        vm.addFood(a,b,c,d,e,f,g); showFoodDialog = false
+    if (showFoodDialog) {
+        FoodDialog(
+            initial = editingEntry,
+            onDismiss = { showFoodDialog = false; editingEntry = null }
+        ) { a, b, c, d, e, f, g ->
+            val edit = editingEntry
+            if (edit == null) vm.addFood(a, b, c, d, e, f, g)
+            else vm.updateFood(edit, a, b, c, d, e, f, g)
+            showFoodDialog = false
+            editingEntry = null
+        }
     }
+
     if (showWeightDialog) NumberDialog("Kilo ekle", "kg", { showWeightDialog = false }) { vm.addWeight(it); showWeightDialog = false }
     if (showGoalDialog) NumberDialog("Günlük kalori hedefi", "kcal", { showGoalDialog = false }) { vm.updateGoal(it.toInt()); showGoalDialog = false }
+
+    pendingDeleteEntry?.let { entry ->
+        ConfirmDeleteDialog(
+            title = "Yemek kaydı silinsin mi?",
+            detail = entry.foodName,
+            onDismiss = { pendingDeleteEntry = null },
+            onConfirm = { vm.deleteFood(entry.id); pendingDeleteEntry = null }
+        )
+    }
+
+    pendingDeleteWeight?.let { weight ->
+        ConfirmDeleteDialog(
+            title = "Kilo kaydı silinsin mi?",
+            detail = "${weight.weightKg} kg • ${weight.dateText()}",
+            onDismiss = { pendingDeleteWeight = null },
+            onConfirm = { vm.deleteWeight(weight.id); pendingDeleteWeight = null }
+        )
+    }
 }
 
 @Composable
@@ -311,20 +430,37 @@ private fun SummaryCard(state: TrackerUiState, onGoalClick: () -> Unit) {
 }
 
 @Composable
-private fun EntryRow(entry: CalorieEntry, showDate: Boolean = false) {
+private fun EntryRow(entry: CalorieEntry, showDate: Boolean = false, onEdit: () -> Unit, onDelete: () -> Unit) {
     ListItem(
         headlineContent = { Text(entry.foodName) },
         supportingContent = { Text((if (showDate) "${entry.dateText()} • " else "") + "${entry.mealType} • ${entry.grams.toInt()} g • P ${entry.proteinG.toInt()} / K ${entry.carbsG.toInt()} / Y ${entry.fatG.toInt()}") },
-        trailingContent = { Text("${entry.calories.toInt()} kcal") }
+        trailingContent = {
+            Column(horizontalAlignment = Alignment.End) {
+                Text("${entry.calories.toInt()} kcal")
+                Row {
+                    TextButton(onClick = onEdit, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("Düzenle") }
+                    TextButton(onClick = onDelete, contentPadding = PaddingValues(horizontal = 6.dp)) { Text("Sil") }
+                }
+            }
+        }
     )
 }
 
 @Composable
-private fun FoodDialog(onDismiss: () -> Unit, onSave: (String, String, Double, Double, Double, Double, Double) -> Unit) {
-    var name by remember { mutableStateOf("") }; var meal by remember { mutableStateOf("Öğün") }
-    var grams by remember { mutableStateOf("") }; var calories by remember { mutableStateOf("") }
-    var protein by remember { mutableStateOf("") }; var carbs by remember { mutableStateOf("") }; var fat by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Yemek ekle") }, text = {
+private fun FoodDialog(
+    initial: CalorieEntry? = null,
+    onDismiss: () -> Unit,
+    onSave: (String, String, Double, Double, Double, Double, Double) -> Unit
+) {
+    var name by remember(initial?.id) { mutableStateOf(initial?.foodName.orEmpty()) }
+    var meal by remember(initial?.id) { mutableStateOf(initial?.mealType ?: "Öğün") }
+    var grams by remember(initial?.id) { mutableStateOf(initial?.grams?.toString().orEmpty()) }
+    var calories by remember(initial?.id) { mutableStateOf(initial?.calories?.toString().orEmpty()) }
+    var protein by remember(initial?.id) { mutableStateOf(initial?.proteinG?.toString().orEmpty()) }
+    var carbs by remember(initial?.id) { mutableStateOf(initial?.carbsG?.toString().orEmpty()) }
+    var fat by remember(initial?.id) { mutableStateOf(initial?.fatG?.toString().orEmpty()) }
+
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (initial == null) "Yemek ekle" else "Yemek düzenle") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(name, { name = it }, label = { Text("Yemek") }, singleLine = true)
             OutlinedTextField(meal, { meal = it }, label = { Text("Öğün") }, singleLine = true)
@@ -337,14 +473,29 @@ private fun FoodDialog(onDismiss: () -> Unit, onSave: (String, String, Double, D
     }, confirmButton = {
         Button(enabled = name.isNotBlank() && grams.toDoubleOrNull() != null && calories.toDoubleOrNull() != null, onClick = {
             onSave(name, meal, grams.toDoubleOrNull() ?: 0.0, calories.toDoubleOrNull() ?: 0.0, protein.toDoubleOrNull() ?: 0.0, carbs.toDoubleOrNull() ?: 0.0, fat.toDoubleOrNull() ?: 0.0)
-        }) { Text("Kaydet") }
+        }) { Text(if (initial == null) "Kaydet" else "Güncelle") }
     }, dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } })
+}
+
+@Composable
+private fun ConfirmDeleteDialog(title: String, detail: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(detail) },
+        confirmButton = { Button(onClick = onConfirm) { Text("Sil") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç") } }
+    )
 }
 
 @Composable
 private fun NumberDialog(title: String, suffix: String, onDismiss: () -> Unit, onSave: (Double) -> Unit) {
     var value by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(title) }, text = { OutlinedTextField(value, { value = it }, label = { Text(suffix) }, singleLine = true) },
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { OutlinedTextField(value, { value = it }, label = { Text(suffix) }, singleLine = true) },
         confirmButton = { Button(enabled = value.toDoubleOrNull() != null, onClick = { value.toDoubleOrNull()?.let(onSave) }) { Text("Kaydet") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } })
+        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } }
+    )
 }
