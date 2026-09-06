@@ -1,0 +1,45 @@
+name: Calorie Tracker AAB
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/calorie-tracker/**'
+      - '.github/workflows/calorie-tracker-aab.yml'
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 37 preview
+        run: sdkmanager --channel=3 'platforms;android-37.0' 'build-tools;37.0.0'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+
+      - name: Create CI local.properties
+        working-directory: apps/calorie-tracker
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "SUPABASE_URL=https://example.supabase.co" >> local.properties
+          echo "SUPABASE_KEY=sb_publishable_ci_placeholder" >> local.properties
+
+      - name: Build release AAB
+        run: gradle -p apps/calorie-tracker bundleRelease --stacktrace
+
+      - name: Upload release candidate AAB
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calorie-tracker-release-aab
+          path: apps/calorie-tracker/app/build/outputs/bundle/release/app-release.aab
