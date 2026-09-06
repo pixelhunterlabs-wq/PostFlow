@@ -30,6 +30,9 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
 import java.time.LocalDate
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.UUID
 
 @Serializable
@@ -68,6 +71,8 @@ data class WeightEntry(
 ) {
     fun dateText(): String = measuredAt.take(10)
 }
+
+data class DailyTotal(val date: LocalDate, val calories: Double)
 
 object SupabaseProvider {
     val configured: Boolean
@@ -108,6 +113,22 @@ data class TrackerUiState(
     }
 
     fun averageSince(days: Long): Int = (caloriesSince(days) / days).toInt()
+
+    fun dailyTotals(days: Int): List<DailyTotal> = (days - 1 downTo 0).map { offset ->
+        val date = today.minusDays(offset.toLong())
+        DailyTotal(date, entries.filter { it.dateText() == date.toString() }.sumOf { it.calories })
+    }
+
+    val monthCalories: Double
+        get() {
+            val month = YearMonth.from(today)
+            return entries.filter {
+                runCatching { YearMonth.from(LocalDate.parse(it.dateText())) == month }.getOrDefault(false)
+            }.sumOf { it.calories }
+        }
+
+    val monthAverage: Int
+        get() = (monthCalories / today.dayOfMonth.coerceAtLeast(1)).toInt()
 }
 
 class TrackerViewModel : ViewModel() {
@@ -272,22 +293,25 @@ class TrackerViewModel : ViewModel() {
 }
 
 class MainActivity : ComponentActivity() {
+    private var authCallbackTick by mutableIntStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         SupabaseProvider.client?.handleDeeplinks(intent)
-        setContent { MaterialTheme { TrackerApp() } }
+        setContent { MaterialTheme { TrackerApp(authRefreshKey = authCallbackTick) } }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         SupabaseProvider.client?.handleDeeplinks(intent)
+        authCallbackTick++
     }
 }
 
 @Composable
-fun TrackerApp(vm: TrackerViewModel = viewModel()) {
+fun TrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()) {
     val state = vm.uiState
     val snackbarHostState = remember { SnackbarHostState() }
     var showFoodDialog by remember { mutableStateOf(false) }
@@ -296,6 +320,10 @@ fun TrackerApp(vm: TrackerViewModel = viewModel()) {
     var showWeightDialog by remember { mutableStateOf(false) }
     var pendingDeleteWeight by remember { mutableStateOf<WeightEntry?>(null) }
     var showGoalDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(authRefreshKey) {
+        vm.refreshSessionAndData()
+    }
 
     LaunchedEffect(state.message) {
         state.message?.let {
@@ -337,6 +365,8 @@ fun TrackerApp(vm: TrackerViewModel = viewModel()) {
                         StatCard("30 gün ort.", "${state.averageSince(30)} kcal", Modifier.weight(1f))
                     }
                 }
+                item { MonthSummaryCard(state) }
+                item { SevenDayCard(state) }
                 item {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { editingEntry = null; showFoodDialog = true }, modifier = Modifier.weight(1f)) { Text("Yemek ekle") }
@@ -346,20 +376,11 @@ fun TrackerApp(vm: TrackerViewModel = viewModel()) {
                 item { Text("Bugünkü kayıtlar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
                 if (state.todayEntries.isEmpty()) item { Text("Henüz yemek kaydı yok.") }
                 else items(state.todayEntries, key = { it.id }) { entry ->
-                    EntryRow(
-                        entry = entry,
-                        onEdit = { editingEntry = entry; showFoodDialog = true },
-                        onDelete = { pendingDeleteEntry = entry }
-                    )
+                    EntryRow(entry, onEdit = { editingEntry = entry; showFoodDialog = true }, onDelete = { pendingDeleteEntry = entry })
                 }
                 item { Text("Son 30 gün geçmişi", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
                 items(state.entries.filter { runCatching { LocalDate.parse(it.dateText()) >= LocalDate.now().minusDays(29) }.getOrDefault(false) }.take(40), key = { "history-${it.id}" }) { entry ->
-                    EntryRow(
-                        entry = entry,
-                        showDate = true,
-                        onEdit = { editingEntry = entry; showFoodDialog = true },
-                        onDelete = { pendingDeleteEntry = entry }
-                    )
+                    EntryRow(entry, showDate = true, onEdit = { editingEntry = entry; showFoodDialog = true }, onDelete = { pendingDeleteEntry = entry })
                 }
                 item { Text("Kilo geçmişi", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
                 if (state.weights.isEmpty()) item { Text("Henüz kilo kaydı yok.") }
@@ -375,13 +396,9 @@ fun TrackerApp(vm: TrackerViewModel = viewModel()) {
     }
 
     if (showFoodDialog) {
-        FoodDialog(
-            initial = editingEntry,
-            onDismiss = { showFoodDialog = false; editingEntry = null }
-        ) { a, b, c, d, e, f, g ->
+        FoodDialog(initial = editingEntry, onDismiss = { showFoodDialog = false; editingEntry = null }) { a, b, c, d, e, f, g ->
             val edit = editingEntry
-            if (edit == null) vm.addFood(a, b, c, d, e, f, g)
-            else vm.updateFood(edit, a, b, c, d, e, f, g)
+            if (edit == null) vm.addFood(a, b, c, d, e, f, g) else vm.updateFood(edit, a, b, c, d, e, f, g)
             showFoodDialog = false
             editingEntry = null
         }
@@ -391,21 +408,10 @@ fun TrackerApp(vm: TrackerViewModel = viewModel()) {
     if (showGoalDialog) NumberDialog("Günlük kalori hedefi", "kcal", { showGoalDialog = false }) { vm.updateGoal(it.toInt()); showGoalDialog = false }
 
     pendingDeleteEntry?.let { entry ->
-        ConfirmDeleteDialog(
-            title = "Yemek kaydı silinsin mi?",
-            detail = entry.foodName,
-            onDismiss = { pendingDeleteEntry = null },
-            onConfirm = { vm.deleteFood(entry.id); pendingDeleteEntry = null }
-        )
+        ConfirmDeleteDialog("Yemek kaydı silinsin mi?", entry.foodName, { pendingDeleteEntry = null }) { vm.deleteFood(entry.id); pendingDeleteEntry = null }
     }
-
     pendingDeleteWeight?.let { weight ->
-        ConfirmDeleteDialog(
-            title = "Kilo kaydı silinsin mi?",
-            detail = "${weight.weightKg} kg • ${weight.dateText()}",
-            onDismiss = { pendingDeleteWeight = null },
-            onConfirm = { vm.deleteWeight(weight.id); pendingDeleteWeight = null }
-        )
+        ConfirmDeleteDialog("Kilo kaydı silinsin mi?", "${weight.weightKg} kg • ${weight.dateText()}", { pendingDeleteWeight = null }) { vm.deleteWeight(weight.id); pendingDeleteWeight = null }
     }
 }
 
@@ -430,6 +436,38 @@ private fun SummaryCard(state: TrackerUiState, onGoalClick: () -> Unit) {
 }
 
 @Composable
+private fun MonthSummaryCard(state: TrackerUiState) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Bu ay", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Toplam ${state.monthCalories.toInt()} kcal")
+            Text("Günlük ortalama ${state.monthAverage} kcal")
+        }
+    }
+}
+
+@Composable
+private fun SevenDayCard(state: TrackerUiState) {
+    val formatter = remember { DateTimeFormatter.ofPattern("EEE d MMM", Locale("tr", "TR")) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Son 7 gün", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            state.dailyTotals(7).forEach { day ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(day.date.format(formatter), modifier = Modifier.width(90.dp), style = MaterialTheme.typography.bodySmall)
+                    LinearProgressIndicator(
+                        progress = { (day.calories / state.calorieGoal.coerceAtLeast(1)).toFloat().coerceIn(0f, 1f) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("${day.calories.toInt()}", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun EntryRow(entry: CalorieEntry, showDate: Boolean = false, onEdit: () -> Unit, onDelete: () -> Unit) {
     ListItem(
         headlineContent = { Text(entry.foodName) },
@@ -447,11 +485,7 @@ private fun EntryRow(entry: CalorieEntry, showDate: Boolean = false, onEdit: () 
 }
 
 @Composable
-private fun FoodDialog(
-    initial: CalorieEntry? = null,
-    onDismiss: () -> Unit,
-    onSave: (String, String, Double, Double, Double, Double, Double) -> Unit
-) {
+private fun FoodDialog(initial: CalorieEntry? = null, onDismiss: () -> Unit, onSave: (String, String, Double, Double, Double, Double, Double) -> Unit) {
     var name by remember(initial?.id) { mutableStateOf(initial?.foodName.orEmpty()) }
     var meal by remember(initial?.id) { mutableStateOf(initial?.mealType ?: "Öğün") }
     var grams by remember(initial?.id) { mutableStateOf(initial?.grams?.toString().orEmpty()) }
