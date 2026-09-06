@@ -1,31 +1,35 @@
 # Calorie Tracker
 
-Android/Kotlin/Jetpack Compose calorie and weight tracker living independently under PostFlow.
+Standalone Android/Kotlin/Jetpack Compose app under PostFlow. It is intentionally isolated from PostFlow `src`, `media-engine` and `installer`.
 
-## Isolation
+## Shared Supabase backend
 
-This app does not modify PostFlow `src`, `media-engine`, `installer`, or existing environment files. It uses the shared Supabase project with namespaced tables:
+The existing **PostFlow_DB** Supabase project is reused. No new paid Supabase project is required.
+
+Existing tables used by the app:
 
 - `calorie_profiles`
-- `calorie_entries`
-- `calorie_weights`
+- `calorie_food_entries`
+- `calorie_weight_entries`
+- `calorie_daily_targets` (reserved for date-specific targets)
 
-RLS limits every row to its owner (`auth.uid() = user_id`).
+All four tables already have owner-only RLS policies based on `auth.uid() = user_id`.
 
-## Current V1
+## V1 features
 
-- Google OAuth through Supabase Auth
-- Daily calorie goal
-- Food entry with grams, calories, protein, carbohydrate and fat
-- Daily calorie + macro summary
-- Weight logging and recent weight history
-- Persistent Supabase sync
-- Android deep link callback: `calorietracker://login`
+- Google OAuth via Supabase Auth
+- daily calorie target
+- food + grams + calories + protein/carbohydrate/fat logging
+- daily macro summary
+- 7-day and 30-day calorie averages
+- recent 30-day food history
+- weight logging and weight history
+- Supabase cloud sync
+- deep-link callback: `calorietracker://login`
 
 ## Local setup
 
-1. Install Android Studio Quail (or compatible) and JDK 17.
-2. Create `local.properties` in this folder (do not commit it):
+Create `local.properties` in this folder:
 
 ```properties
 sdk.dir=C:\\Users\\YOUR_USER\\AppData\\Local\\Android\\Sdk
@@ -33,24 +37,29 @@ SUPABASE_URL=https://YOUR_PROJECT.supabase.co
 SUPABASE_KEY=sb_publishable_YOUR_KEY
 ```
 
-3. In the shared Supabase project SQL editor, run `supabase/schema.sql` once.
-4. In Supabase Auth > Providers > Google, enable Google and configure its Client ID/Secret.
-5. Add `calorietracker://login` to allowed redirect URLs.
-6. Open this folder as an Android Studio project, sync Gradle, and run the `app` configuration.
+Use the publishable key only. Never place a secret/service-role key in the Android client.
 
-## Security
+Supabase Auth setup:
 
-- Never place a Supabase secret/service-role key in the Android app.
-- The Android app uses only the publishable key.
-- RLS is enabled on every exposed table.
-- Future apps should use their own table prefix while sharing the same Supabase project.
+1. Enable Google provider in the shared project.
+2. Configure Google OAuth Client ID / Client Secret.
+3. Add `calorietracker://login` to allowed redirect URLs.
+4. Open this folder in Android Studio, sync Gradle and run `app`.
 
-## Next product milestones
+## Toolchain
 
-- weekly/monthly dashboard and charts
-- reusable foods/favorites
+- JDK 17
+- Android Gradle Plugin 9.4.0
+- compileSdk 37 / targetSdk 36 / minSdk 26
+- Compose BOM 2026.08.00
+- supabase-kt BOM 3.8.0
+
+## Planned V2
+
+- favorite/reusable foods
 - Open Food Facts search + barcode scanner
 - camera/AI food estimation
 - reminders
-- Google Play billing / premium tier
-- tests, CI and signed Play Store release pipeline
+- charts and deeper weekly/monthly analytics
+- Play Billing premium tier
+- tests + CI + signed Play Store release pipeline
