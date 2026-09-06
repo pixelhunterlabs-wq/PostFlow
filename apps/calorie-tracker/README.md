@@ -38,8 +38,10 @@ All four tables use owner-only RLS policies based on `auth.uid() = user_id`.
 - authenticated `delete-calorie-account` Supabase Edge Function
 - Turkish privacy policy draft
 - Turkish Play Store listing draft
+- Google Play Data Safety / Health Apps declaration draft
 - GitHub Actions debug APK build verification
 - GitHub Actions release-candidate AAB build verification
+- optional Play upload-key signing pipeline
 
 ## Verified Android builds
 
@@ -57,7 +59,22 @@ Release candidate AAB:
 gradle -p apps/calorie-tracker bundleRelease --stacktrace
 ```
 
-The verified workflow uploads `calorie-tracker-release-aab`. This confirms release bundling works, but the Play upload signing/keystore pipeline still needs to be configured before production submission.
+The verified workflow uploads `calorie-tracker-release-aab`.
+
+## Play upload signing
+
+The AAB workflow is signing-ready. When the four repository secrets below exist, the workflow reconstructs the upload keystore in the GitHub runner, exposes only temporary environment variables to Gradle, signs the release bundle, and verifies the resulting AAB with `jarsigner`.
+
+Required GitHub Actions secrets:
+
+- `CALORIE_UPLOAD_KEYSTORE_BASE64`
+- `CALORIE_UPLOAD_KEYSTORE_PASSWORD`
+- `CALORIE_UPLOAD_KEY_ALIAS`
+- `CALORIE_UPLOAD_KEY_PASSWORD`
+
+If these secrets are absent, CI still builds an unsigned release-candidate AAB so pull requests remain testable. The keystore file and passwords must never be committed to Git.
+
+To prepare `CALORIE_UPLOAD_KEYSTORE_BASE64` locally after creating the Play upload keystore, base64-encode the binary `.jks` file and store only that encoded value in the GitHub secret.
 
 ## Account deletion
 
@@ -100,10 +117,10 @@ Supabase Auth setup:
 ## Remaining before Play Store production release
 
 - runtime device test of Google OAuth, barcode scan/Open Food Facts and account deletion using a disposable test account
-- upload keystore + signed production AAB pipeline
+- create the real Play upload keystore and add the four GitHub Actions secrets
 - app icon and final visual polish
 - phone screenshots and feature graphic
-- publish privacy policy at a public URL
+- publish privacy policy at a public HTTPS URL and expose it clearly inside the app
 - complete Play Console Data Safety / Health Apps declarations and content rating
 - optional camera/AI food estimation
 - optional Play Billing premium tier
