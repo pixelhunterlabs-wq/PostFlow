@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 type View = "dashboard" | "studio" | "ready" | "engine";
 type EngineState = "checking" | "connected" | "offline";
 type TaskStatus = "queued" | "processing" | "completed" | "failed";
-type Workflow = "short" | "long" | "story" | "quiz";
+type Workflow = "short" | "long" | "story";
 type Aspect = "9:16" | "16:9" | "1:1";
 
 type Scene = { id: string; number: number; text: string; visualPrompt: string; characters: string[] };
@@ -17,7 +17,6 @@ const workflowDefaults: Record<Workflow, { label: string; aspect: Aspect; durati
   short: { label: "Kısa Video", aspect: "9:16", duration: 45, scenes: 4 },
   long: { label: "Uzun Video", aspect: "16:9", duration: 300, scenes: 12 },
   story: { label: "Hikaye Videosu", aspect: "9:16", duration: 60, scenes: 6 },
-  quiz: { label: "Quiz Video", aspect: "9:16", duration: 45, scenes: 5 },
 };
 
 function taskLabel(status: TaskStatus) {
@@ -236,7 +235,7 @@ export default function Home() {
       <section className="production-card">
         <div className="card-head"><span>01</span><div><h2>İçeriği Hazırla</h2><p>Senaryo ve sahneler hazırlanır. Video başlamaz.</p></div></div>
         <div className="field-pair">
-          <label>Video türü<select value={workflow} onChange={(event) => resetForWorkflow(event.target.value as Workflow)}><option value="short">Kısa Video</option><option value="long">Uzun Video</option><option value="story">Hikaye Videosu</option><option value="quiz">Quiz Video</option></select></label>
+          <label>Video türü<select value={workflow} onChange={(event) => resetForWorkflow(event.target.value as Workflow)}><option value="short">Kısa Video</option><option value="long">Uzun Video</option><option value="story">Hikaye Videosu</option></select></label>
           <label>Dil<select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="tr">Türkçe</option><option value="en">English</option><option value="ar">العربية</option></select></label>
         </div>
         <label>Video konusu<textarea value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="Örn. 30 saniyede şaşırtıcı bir teknoloji gerçeği" /></label>
