@@ -36,11 +36,15 @@ All four tables use owner-only RLS policies based on `auth.uid() = user_id`.
 - Supabase cloud sync
 - in-app account + calorie data deletion flow
 - authenticated `delete-calorie-account` Supabase Edge Function
-- Turkish privacy policy draft
+- bundled offline privacy-policy screen (`PrivacyPolicyActivity`)
+- Turkish public privacy-policy HTML ready for HTTPS hosting
 - Turkish Play Store listing draft
 - Google Play Data Safety / Health Apps declaration draft
-- GitHub Actions debug APK build verification
-- GitHub Actions release-candidate AAB build verification
+- custom launcher icon
+- Play Store asset specification for icon, feature graphic and screenshots
+- unit tests for calorie-state calculations
+- GitHub Actions unit-test + debug APK verification
+- GitHub Actions release-candidate AAB verification
 - optional Play upload-key signing pipeline
 
 ## Verified Android builds
@@ -48,10 +52,10 @@ All four tables use owner-only RLS policies based on `auth.uid() = user_id`.
 Debug APK:
 
 ```bash
-gradle -p apps/calorie-tracker assembleDebug --stacktrace
+gradle -p apps/calorie-tracker testDebugUnitTest assembleDebug --stacktrace
 ```
 
-The verified workflow uploads `calorie-tracker-debug`.
+The Android workflow runs unit tests before building and uploads `calorie-tracker-debug` only after a successful build.
 
 Release candidate AAB:
 
@@ -59,7 +63,7 @@ Release candidate AAB:
 gradle -p apps/calorie-tracker bundleRelease --stacktrace
 ```
 
-The verified workflow uploads `calorie-tracker-release-aab`.
+The AAB workflow uploads `calorie-tracker-release-aab`.
 
 ## Play upload signing
 
@@ -74,8 +78,6 @@ Required GitHub Actions secrets:
 
 If these secrets are absent, CI still builds an unsigned release-candidate AAB so pull requests remain testable. The keystore file and passwords must never be committed to Git.
 
-To prepare `CALORIE_UPLOAD_KEYSTORE_BASE64` locally after creating the Play upload keystore, base64-encode the binary `.jks` file and store only that encoded value in the GitHub secret.
-
 ## Account deletion
 
 The Android client invokes the authenticated Supabase Edge Function `delete-calorie-account`. The function derives the caller from the JWT, deletes only that user's calorie/weight/target/profile rows, then deletes the corresponding Auth user. The service-role key remains server-side and is never shipped in the Android app.
@@ -83,6 +85,22 @@ The Android client invokes the authenticated Supabase Edge Function `delete-calo
 Version-controlled function source:
 
 `supabase/functions/delete-calorie-account/`
+
+## Privacy policy
+
+Public-hosting source:
+
+`store/privacy-policy.html`
+
+Bundled in-app copy:
+
+`app/src/main/assets/privacy-policy.html`
+
+Android screen:
+
+`PrivacyPolicyActivity`
+
+The activity is addressable with the internal deep link `calorietracker://privacy`. The main-screen visible entry point still needs final UI wiring before production submission.
 
 ## Local setup
 
@@ -118,10 +136,10 @@ Supabase Auth setup:
 
 - runtime device test of Google OAuth, barcode scan/Open Food Facts and account deletion using a disposable test account
 - create the real Play upload keystore and add the four GitHub Actions secrets
-- app icon and final visual polish
-- phone screenshots and feature graphic
-- publish privacy policy at a public HTTPS URL and expose it clearly inside the app
-- complete Play Console Data Safety / Health Apps declarations and content rating
+- wire a visible privacy-policy button into the main app UI
+- generate final 512x512 Play icon, 1024x500 feature graphic and phone screenshots
+- publish privacy policy at a public HTTPS URL
+- complete Play Console Data Safety / Health Apps declarations, target audience and content rating
 - optional camera/AI food estimation
 - optional Play Billing premium tier
 - instrumentation/UI tests
