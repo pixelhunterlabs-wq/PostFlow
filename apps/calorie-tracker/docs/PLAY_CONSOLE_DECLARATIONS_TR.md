@@ -1,8 +1,8 @@
 # Kalori Takip – Google Play Console beyan taslağı
 
-Son güncelleme: 6 Eylül 2026
+Son güncelleme: 7 Eylül 2026
 
-Bu belge Play Console formlarını doldururken referans olması içindir. Formlar, yayımlanacak son uygulama sürümündeki SDK ve veri akışlarıyla tekrar karşılaştırılmalıdır.
+Bu belge Play Console formlarını doldururken referans olması içindir. Formlar, yayımlanacak son AAB ve SDK listesiyle tekrar karşılaştırılmalıdır.
 
 ## Health Apps Declaration
 
@@ -10,45 +10,74 @@ Seçilmesi gereken ana sağlık özelliği:
 
 - Health and fitness → Nutrition and Weight Management
 
-Gerekçe: Uygulama kalori/makro besin alımını, günlük beslenme hedeflerini ve kilo kayıtlarını takip eder.
+Ek sağlık özelliği / Health Connect kullanımı:
+
+- Physical activity → Steps
+- Uygulama yalnızca `android.permission.health.READ_STEPS` ister.
+- Adım verisi kullanıcı açıkça izin verirse Health Connect'ten okunur ve günlük aktivite bilgisini göstermek için kullanılır.
+- Uygulama Health Connect'e adım verisi yazmaz.
+- Adım verisi reklam hedefleme, veri brokerı veya üçüncü taraf pazarlama amacıyla kullanılmaz.
+
+Gerekçe: Uygulama kalori/makro besin alımını, günlük beslenme hedeflerini, kilo kayıtlarını ve isteğe bağlı adım bilgisini takip eder.
 
 Uygulama tıbbi cihaz değildir; teşhis, tedavi, hastalık yönetimi veya klinik karar desteği sağlamaz.
 
-Mağaza açıklaması ve uygulama içinde uygun yerde açık bir uyarı bulunmalıdır:
-
-> Kalori Takip tıbbi bir cihaz değildir ve herhangi bir hastalığı teşhis etmez, tedavi etmez, iyileştirmez veya önlemez. Besin verileri bilgi amaçlıdır ve üçüncü taraf veritabanlarında hata veya eksiklik bulunabilir.
-
-## Data Safety – mevcut V1 için çalışma taslağı
+## Data Safety – güncel V1 çalışma taslağı
 
 ### Personal info
 
 **Email address**
 - Toplanıyor: Evet
 - Kullanım: Account management / App functionality
-- Paylaşım: Uygulamanın kendi işlevi kapsamında üçüncü taraf reklam ağına satılmaz/paylaşılmaz; Google OAuth ve Supabase Auth veri işleyen hizmetlerdir.
-- Kullanıcı silme talebinde uygulama hesabıyla ilişkili veri silme akışı vardır.
+- Google OAuth ve Supabase Auth hesap işlevleri için kullanılır.
 
 **User IDs**
 - Toplanıyor: Evet
 - Kullanım: Account management / App functionality
-- Supabase Auth kullanıcı kimliği, kayıtların sahibini ayırmak ve RLS uygulamak için kullanılır.
+- Supabase Auth kullanıcı kimliği kayıtların sahibini ayırmak ve RLS uygulamak için kullanılır.
 
 ### Health and fitness
 
-Kullanıcının girdiği beslenme, kalori, makro ve kilo kayıtları kişisel/sensitive health and fitness data olarak ele alınmalıdır.
-
-**Health / fitness related data**
+**Nutrition / weight data**
 - Toplanıyor: Evet
 - Örnekler: günlük kalori kayıtları, protein/karbonhidrat/yağ, beslenme hedefi, kilo geçmişi
-- Kullanım: App functionality; kişisel ilerleme/özet oluşturma
-- Paylaşım: Reklam veya veri brokerı amacıyla paylaşılmaz
+- Kullanım: App functionality; kişisel ilerleme ve özet oluşturma
 - Saklama: Supabase veritabanı
 - Güvenlik: kullanıcı bazlı kimlik doğrulama + RLS
 - Kullanıcı silme: uygulama içi hesap silme akışı mevcut
 
-### App activity / user-generated content değerlendirmesi
+**Steps / physical activity**
+- Health Connect üzerinden kullanıcı izniyle okunur.
+- Mevcut uygulama kodunda adım verisi Supabase'e veya başka bir geliştirici sunucusuna yüklenmez; cihaz üzerinde gösterilir.
+- Play Data Safety formunda “collected” tanımı son gönderim sırasında Google'ın güncel tanımıyla tekrar doğrulanmalıdır; cihaz dışına aktarılmayan Health Connect adımı bu taslakta geliştirici sunucusuna toplanan veri olarak işaretlenmemelidir.
+- Health Connect izin beyanında READ_STEPS erişimi açıkça bildirilmelidir.
 
-Yemek adı ve kullanıcının manuel girdiği kayıtlar uygulama içeriği sayılabilir. Play Console formundaki güncel kategori ifadeleri, gönderim sırasında yeniden kontrol edilmelidir. Bu veriler yalnızca kalori takibinin temel işlevi için saklanır.
+### Cihaz üzerinde saklanan tercihler
+
+Aşağıdaki veriler uygulamanın yerel depolamasında tutulabilir:
+- su takibi
+- favori yiyecekler
+- kayıtlı öğünler
+- haftalık kilo hedefi tercihi
+- öğün bildirim tercihi
+- onboarding tamamlanma durumu
+
+Android sistem yedeği kapalı olduğundan bu yerel tercihler sistem yedeğine dahil edilmez.
+
+### Mikrofon / sesli yemek ekleme
+
+- İzin: `android.permission.RECORD_AUDIO`
+- Kullanım: Kullanıcının isteğiyle Android konuşma tanıma arayüzünü başlatmak ve yemek cümlesini metne dönüştürmek.
+- Uygulama kendi sunucusuna ham ses dosyası yüklemez veya saklamaz.
+- Kullanılan Android konuşma tanıma sağlayıcısı cihaz/hesap ayarlarına göre sesi kendi hizmetinde işleyebilir; bu sağlayıcının veri uygulamaları Google/cihaz sağlayıcısının politikalarına tabidir.
+- Uygulama tanınan metni Türk yiyecek kataloğuyla eşleştirip kullanıcı onayıyla yemek kaydı oluşturur.
+
+### Bildirimler
+
+- İzin: `POST_NOTIFICATIONS` (Android 13+)
+- Kullanım: isteğe bağlı kahvaltı, öğle ve akşam yemek kaydı hatırlatmaları
+- Varsayılan saatler: 08:00, 13:00, 19:00
+- Kullanıcı özelliği kapatabilir.
 
 ### Third-party services / SDKs
 
@@ -58,6 +87,13 @@ Yemek adı ve kullanıcının manuel girdiği kayıtlar uygulama içeriği sayı
 **Supabase Auth / Database / Edge Functions**
 - Amaç: Authentication, cloud storage/sync, account deletion
 
+**Android Health Connect**
+- Amaç: kullanıcının izin verdiği adım verisini okumak
+- İzin: READ_STEPS
+
+**Android Speech Recognition provider**
+- Amaç: kullanıcının başlattığı sesli yemek girişini metne çevirmek
+
 **Google Code Scanner / Google Play Services**
 - Amaç: Product barcode scanning
 - Uygulama doğrudan CAMERA izni istemez; tarama Google Play Services tarafından sağlanır.
@@ -65,22 +101,22 @@ Yemek adı ve kullanıcının manuel girdiği kayıtlar uygulama içeriği sayı
 **Open Food Facts**
 - Amaç: Barkoddan ürün ve besin bilgisi sorgulama
 - Gönderilen veri: taranan/yazılan ürün barkodu
-- Kullanıcının hesap e-postası veya Supabase kullanıcı kimliği Open Food Facts sorgusuna özellikle eklenmez.
+- Hesap e-postası veya Supabase kullanıcı kimliği Open Food Facts sorgusuna özellikle eklenmez.
 
-## Data sharing notları
+## Dinamik kalori hedefi
 
-Play Console'daki “collected” ve “shared” tanımları Google'ın güncel Data Safety kurallarına göre değerlendirilmelidir. Bir SDK'nın cihazdan hangi verileri otomatik gönderdiği son release dependency seti üzerinden ayrıca kontrol edilmelidir.
-
-Bu V1'de reklam SDK'sı, analytics SDK'sı veya üçüncü taraf veri brokerı eklenmemiştir.
+- Kullanıcının kendi kilo kayıtlarından yaklaşık haftalık kilo değişimi hesaplanır.
+- Kullanıcının seçtiği haftalık hedef ile karşılaştırılır.
+- Günlük hedef için en fazla ±250 kcal düzeltme önerilir.
+- Öneri otomatik uygulanmaz; kullanıcı “Öneriyi uygula” seçeneğine basarsa uygulanır.
+- Bu özellik tıbbi tavsiye olarak sunulmamalıdır.
 
 ## Privacy Policy
 
-Play Store üretim sürümünden önce:
-
-- `docs/PRIVACY_POLICY_TR.md` aktif, herkese açık, coğrafi engeli olmayan bir HTTPS URL'de yayınlanmalı.
-- Gizlilik politikası PDF olmamalı.
-- Uygulama içinden de gizlilik politikasına erişilebilir olmalı.
-- Politika; Google OAuth, Supabase, beslenme/kilo verileri, barkod/Open Food Facts ve hesap silme akışını açıklamalı.
+Üretim öncesinde:
+- `/privacy/calorie-tracker` sayfası kalıcı, herkese açık HTTPS alanında yayınlanmalı.
+- Uygulama içindeki paketlenmiş gizlilik sayfası da erişilebilir kalmalı.
+- Politika; Google OAuth, Supabase, beslenme/kilo verileri, Health Connect adımı, bildirimler, sesli giriş, barkod/Open Food Facts ve hesap silme akışını açıklamalı.
 
 ## Account deletion
 
@@ -93,13 +129,15 @@ Backend:
 - ardından ilgili Supabase Auth kullanıcısı silinir
 - service-role anahtarı Android istemcisine gönderilmez
 
-Google Play'in web üzerinden hesap silme URL'si istemesi halinde ayrıca herkese açık bir hesap silme sayfası hazırlanmalıdır; bu alan Play Console hesabı oluşturulurken doğrulanacaktır.
-
 ## Yayın öncesi son kontrol
 
-- Health Apps Declaration: Nutrition and Weight Management
-- Data Safety formu son APK/AAB ve SDK listesiyle eşleştir
+- Health Apps Declaration: Nutrition and Weight Management + Steps
+- Health Connect READ_STEPS erişimi beyanı
+- Data Safety formunu son AAB ile eşleştir
+- microphone/voice logging açıklamasını permission formunda doğrula
 - aktif HTTPS gizlilik politikası URL'si ekle
-- uygulama içinde gizlilik politikası linki ekle
 - hesap silme akışını geçici test hesabıyla gerçek cihazda doğrula
-- tıbbi cihaz olmadığını belirten uyarıyı mağaza açıklaması ve uygun uygulama ekranına ekle
+- Health Connect izin/revoke senaryosunu gerçek cihazda test et
+- Android 13+ notification permission akışını test et
+- sesli girişin Türkçe konuşma sağlayıcısıyla cihaz testini yap
+- tıbbi cihaz olmadığını belirten uyarıyı mağaza açıklaması ve uygulamada koru
