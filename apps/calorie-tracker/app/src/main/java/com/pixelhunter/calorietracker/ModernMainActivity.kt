@@ -77,6 +77,7 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
     var showGoalDialog by remember { mutableStateOf(false) }
     var showManualBarcode by remember { mutableStateOf(false) }
     var pendingMealDelete by remember { mutableStateOf<CalorieEntry?>(null) }
+    var editingDiaryEntry by remember { mutableStateOf<CalorieEntry?>(null) }
     var showDeleteAccount by remember { mutableStateOf(false) }
     var waterMl by remember { mutableIntStateOf(store.waterMl()) }
     var favorites by remember { mutableStateOf(store.favorites()) }
@@ -204,7 +205,7 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
                     onVoice = ::openVoice,
                     onGoal = { showGoalDialog = true }
                 )
-                MainTab.DIARY -> DiaryScreen(state, onFood = { showFoodSearch = true }, onRepeat = vm::addRecentFood, onLongPressEntry = { pendingMealDelete = it })
+                MainTab.DIARY -> DiaryScreen(state, onFood = { showFoodSearch = true }, onRepeat = vm::addRecentFood, onEditEntry = { editingDiaryEntry = it }, onLongPressEntry = { pendingMealDelete = it })
                 MainTab.PROGRESS -> ProgressScreen(state, onWeight = { showWeightDialog = true })
                 MainTab.PROFILE -> ProfileScreen(
                     state = state,
@@ -274,6 +275,12 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
             confirmButton = { Button(onClick = { vm.deleteFood(entry.id); pendingMealDelete = null }, colors = ButtonDefaults.buttonColors(containerColor = KaloriDanger, contentColor = Color.White)) { Text("Sil") } },
             dismissButton = { TextButton(onClick = { pendingMealDelete = null }) { Text("Vazgeç", color = KaloriGreen) } }
         )
+    }
+    editingDiaryEntry?.let { entry ->
+        EditDiaryEntryDialog(entry, onDismiss = { editingDiaryEntry = null }) { name, meal, grams, calories, protein, carbs, fat ->
+            vm.updateFood(entry, name, meal, grams, calories, protein, carbs, fat)
+            editingDiaryEntry = null
+        }
     }
     state.barcodeProduct?.let { product ->
         ModernBarcodeProductDialog(product, vm::clearBarcodeProduct) { meal, grams -> vm.addBarcodeFood(product, meal, grams) }
@@ -506,18 +513,28 @@ private fun QuickActionCard(label: String, icon: androidx.compose.ui.graphics.ve
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DiaryScreen(state: TrackerUiState, onFood: () -> Unit, onRepeat: (CalorieEntry) -> Unit, onLongPressEntry: (CalorieEntry) -> Unit) {
+private fun DiaryScreen(state: TrackerUiState, onFood: () -> Unit, onRepeat: (CalorieEntry) -> Unit, onEditEntry: (CalorieEntry) -> Unit, onLongPressEntry: (CalorieEntry) -> Unit) {
     val meals = listOf("Kahvaltı", "Öğle", "Akşam", "Atıştırmalık", "Öğün")
+    var selectedDate by remember { mutableStateOf(LocalDate.now()) }
+    val selectedEntries = state.entries.filter { it.dateText() == selectedDate.toString() }
+    val selectedCalories = selectedEntries.sumOf { it.calories }
     LazyColumn(contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 110.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("${state.caloriesToday.toInt()} / ${state.calorieGoal} kcal", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
+                Text("${selectedCalories.toInt()} / ${state.calorieGoal} kcal", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
                 Button(onClick = onFood) { Text("+ Yemek") }
+            }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { selectedDate = selectedDate.minusDays(1) }) { Icon(Icons.Filled.ChevronLeft, "Önceki gün") }
+                Text(selectedDate.format(DateTimeFormatter.ofPattern("d MMMM, EEEE", Locale.forLanguageTag("tr-TR"))), fontWeight = FontWeight.Bold)
+                IconButton(onClick = { if (selectedDate < LocalDate.now()) selectedDate = selectedDate.plusDays(1) }, enabled = selectedDate < LocalDate.now()) { Icon(Icons.Filled.ChevronRight, "Sonraki gün") }
             }
         }
         item { Text("Düzeltmek veya silmek için öğüne basılı tut.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall) }
         meals.forEach { meal ->
-            val entries = state.todayEntries.filter { normalizeMeal(it.mealType) == meal }
+            val entries = selectedEntries.filter { normalizeMeal(it.mealType) == meal }
             if (entries.isNotEmpty() || meal != "Öğün") {
                 item { SectionTitle(meal) }
                 item {
@@ -525,7 +542,7 @@ private fun DiaryScreen(state: TrackerUiState, onFood: () -> Unit, onRepeat: (Ca
                         if (entries.isEmpty()) Text("Henüz kayıt yok", color = KaloriMuted)
                         entries.forEach { entry ->
                             val haptics = LocalHapticFeedback.current
-                            Row(Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onLongPressEntry(entry) }).padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.fillMaxWidth().combinedClickable(onClick = { onEditEntry(entry) }, onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onLongPressEntry(entry) }).padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text(entry.foodName, fontWeight = FontWeight.SemiBold)
                                     Text("${entry.grams.toInt()} g • P ${entry.proteinG.toInt()} • K ${entry.carbsG.toInt()} • Y ${entry.fatG.toInt()}", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
@@ -863,6 +880,33 @@ private fun MacroCard(title: String, value: Int, goal: Int, color: Color, modifi
             LinearProgressIndicator(progress = { (value / goal.toFloat()).coerceIn(0f, 1f) }, color = color, trackColor = Color(0xFF26332F), modifier = Modifier.fillMaxWidth().height(7.dp))
         }
     }
+}
+
+@Composable
+private fun EditDiaryEntryDialog(entry: CalorieEntry, onDismiss: () -> Unit, onSave: (String, String, Double, Double, Double, Double, Double) -> Unit) {
+    var name by remember(entry.id) { mutableStateOf(entry.foodName) }
+    var meal by remember(entry.id) { mutableStateOf(entry.mealType) }
+    var grams by remember(entry.id) { mutableStateOf(entry.grams.toString()) }
+    var calories by remember(entry.id) { mutableStateOf(entry.calories.toString()) }
+    var protein by remember(entry.id) { mutableStateOf(entry.proteinG.toString()) }
+    var carbs by remember(entry.id) { mutableStateOf(entry.carbsG.toString()) }
+    var fat by remember(entry.id) { mutableStateOf(entry.fatG.toString()) }
+    val valid = name.isNotBlank() && grams.toDoubleOrNull() != null && calories.toDoubleOrNull() != null
+    AlertDialog(
+        onDismissRequest = onDismiss, containerColor = KaloriDialog, titleContentColor = KaloriText, textContentColor = KaloriMuted,
+        title = { Text("Öğünü düzenle", fontWeight = FontWeight.Bold) },
+        text = { LazyColumn(Modifier.heightIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { OutlinedTextField(name, { name = it }, label = { Text("Yemek") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+            item { OutlinedTextField(meal, { meal = it }, label = { Text("Öğün") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+            item { NumberField("Gram", grams) { grams = it } }
+            item { NumberField("Kalori", calories) { calories = it } }
+            item { NumberField("Protein g", protein) { protein = it } }
+            item { NumberField("Karbonhidrat g", carbs) { carbs = it } }
+            item { NumberField("Yağ g", fat) { fat = it } }
+        } },
+        confirmButton = { Button(enabled = valid, onClick = { onSave(name, meal, grams.toDoubleOrNull() ?: 0.0, calories.toDoubleOrNull() ?: 0.0, protein.toDoubleOrNull() ?: 0.0, carbs.toDoubleOrNull() ?: 0.0, fat.toDoubleOrNull() ?: 0.0) }) { Text("Kaydet") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç", color = KaloriGreen) } }
+    )
 }
 
 @Composable
