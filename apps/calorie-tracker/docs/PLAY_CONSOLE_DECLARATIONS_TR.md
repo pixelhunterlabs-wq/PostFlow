@@ -57,7 +57,7 @@ Uygulama tıbbi cihaz değildir; teşhis, tedavi, hastalık yönetimi veya klini
 Aşağıdaki veriler uygulamanın yerel depolamasında tutulabilir:
 - su takibi
 - favori yiyecekler
-- kayıtlı öğünler
+- kayıtlı öğünler / tarifler
 - haftalık kilo hedefi tercihi
 - öğün bildirim tercihi
 - onboarding tamamlanma durumu
@@ -72,6 +72,17 @@ Android sistem yedeği kapalı olduğundan bu yerel tercihler sistem yedeğine d
 - Kullanılan Android konuşma tanıma sağlayıcısı cihaz/hesap ayarlarına göre sesi kendi hizmetinde işleyebilir; bu sağlayıcının veri uygulamaları Google/cihaz sağlayıcısının politikalarına tabidir.
 - Uygulama tanınan metni Türk yiyecek kataloğuyla eşleştirip kullanıcı onayıyla yemek kaydı oluşturur.
 
+### Fotoğraf / AI yemek analizi
+
+- Kullanıcı galeriden bir yemek fotoğrafını isteğe bağlı olarak seçer.
+- Seçilen fotoğraf authenticated Supabase Edge Function `analyze-food-photo` üzerinden AI analiz sağlayıcısına gönderilebilir.
+- Amaç: görünen yiyecekleri, yaklaşık porsiyon gramını ve kalori/makro değerlerini tahmin etmek.
+- Uygulama fotoğrafı kendi Supabase veritabanında veya Storage alanında kalıcı olarak saklamaz.
+- AI sağlayıcı anahtarı Android istemcisine dahil edilmez; yalnızca Edge Function secret olarak tutulmalıdır.
+- Dönen sonuçlar tahmini olarak gösterilir ve kullanıcı günlüğe ekleme kararını kendisi verir.
+- Fotoğraf reklam hedefleme, profil oluşturma veya veri brokerı amacıyla kullanılmaz.
+- Play Data Safety formunda “Photos and videos” kategorisi, üçüncü taraf AI API'ye aktarım nedeniyle son release veri akışıyla birlikte işaretlenmelidir.
+
 ### Bildirimler
 
 - İzin: `POST_NOTIFICATIONS` (Android 13+)
@@ -85,7 +96,7 @@ Android sistem yedeği kapalı olduğundan bu yerel tercihler sistem yedeğine d
 - Amaç: Authentication / Account management
 
 **Supabase Auth / Database / Edge Functions**
-- Amaç: Authentication, cloud storage/sync, account deletion
+- Amaç: Authentication, cloud storage/sync, account deletion ve AI fotoğraf isteğinin güvenli sunucu tarafı aracılığı
 
 **Android Health Connect**
 - Amaç: kullanıcının izin verdiği adım verisini okumak
@@ -93,6 +104,10 @@ Android sistem yedeği kapalı olduğundan bu yerel tercihler sistem yedeğine d
 
 **Android Speech Recognition provider**
 - Amaç: kullanıcının başlattığı sesli yemek girişini metne çevirmek
+
+**AI analiz sağlayıcısı**
+- Amaç: kullanıcının açıkça seçtiği yemek fotoğrafından yaklaşık porsiyon ve besin değerleri üretmek
+- Fotoğraf doğrudan Android uygulamasından üçüncü taraf API anahtarıyla gönderilmez; authenticated Edge Function üzerinden iletilir.
 
 **Google Code Scanner / Google Play Services**
 - Amaç: Product barcode scanning
@@ -116,7 +131,7 @@ Android sistem yedeği kapalı olduğundan bu yerel tercihler sistem yedeğine d
 Üretim öncesinde:
 - `/privacy/calorie-tracker` sayfası kalıcı, herkese açık HTTPS alanında yayınlanmalı.
 - Uygulama içindeki paketlenmiş gizlilik sayfası da erişilebilir kalmalı.
-- Politika; Google OAuth, Supabase, beslenme/kilo verileri, Health Connect adımı, bildirimler, sesli giriş, barkod/Open Food Facts ve hesap silme akışını açıklamalı.
+- Politika; Google OAuth, Supabase, beslenme/kilo verileri, Health Connect adımı, bildirimler, sesli giriş, fotoğraf AI analizi, barkod/Open Food Facts ve hesap silme akışını açıklamalı.
 
 ## Account deletion
 
@@ -135,9 +150,11 @@ Backend:
 - Health Connect READ_STEPS erişimi beyanı
 - Data Safety formunu son AAB ile eşleştir
 - microphone/voice logging açıklamasını permission formunda doğrula
+- fotoğraf AI özelliği etkinse Photos and videos + üçüncü taraf veri akışını Data Safety'de doğrula
 - aktif HTTPS gizlilik politikası URL'si ekle
 - hesap silme akışını geçici test hesabıyla gerçek cihazda doğrula
 - Health Connect izin/revoke senaryosunu gerçek cihazda test et
 - Android 13+ notification permission akışını test et
 - sesli girişin Türkçe konuşma sağlayıcısıyla cihaz testini yap
+- AI fotoğraf analizini gerçek cihaz ve test fotoğraflarıyla doğrula
 - tıbbi cihaz olmadığını belirten uyarıyı mağaza açıklaması ve uygulamada koru
