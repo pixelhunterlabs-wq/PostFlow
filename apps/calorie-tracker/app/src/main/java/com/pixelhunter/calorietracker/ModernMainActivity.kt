@@ -211,6 +211,7 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
                     state = state,
                     onGoal = { showGoalDialog = true },
                     onWeight = { showWeightDialog = true },
+                    onWellness = { context.startActivity(Intent(context, WellnessHubActivity::class.java)) },
                     onPrivacy = { context.startActivity(Intent(context, PrivacyPolicyActivity::class.java)) },
                     onSignOut = vm::signOut,
                     onDelete = { showDeleteAccount = true }
@@ -638,6 +639,7 @@ private fun ProfileScreen(
     state: TrackerUiState,
     onGoal: () -> Unit,
     onWeight: () -> Unit,
+    onWellness: () -> Unit,
     onPrivacy: () -> Unit,
     onSignOut: () -> Unit,
     onDelete: () -> Unit
@@ -654,6 +656,7 @@ private fun ProfileScreen(
         }
         item { SettingsRow(Icons.Filled.TrackChanges, "Hedeflerim", "Günlük ${state.calorieGoal} kcal", onGoal) }
         item { SettingsRow(Icons.Filled.MonitorWeight, "Kilo kaydı", state.weights.firstOrNull()?.let { "Güncel ${it.weightKg} kg" } ?: "Kilo ekle", onWeight) }
+        item { SettingsRow(Icons.Filled.Favorite, "Sağlık ve hatırlatmalar", "Öğün bildirimleri, Health Connect ve kayıtlı öğünler", onWellness) }
         item { SettingsRow(Icons.Filled.Security, "Gizlilik Politikası", "Verileriniz ve hesap silme bilgileri", onPrivacy) }
         item { SettingsRow(Icons.Filled.Logout, "Çıkış Yap", "Google hesabından çık", onSignOut) }
         item {
