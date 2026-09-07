@@ -36,8 +36,8 @@ jobs:
         working-directory: apps/calorie-tracker
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          echo "SUPABASE_URL=https://example.supabase.co" >> local.properties
-          echo "SUPABASE_KEY=sb_publishable_ci_placeholder" >> local.properties
+          echo "SUPABASE_URL=https://jecbdzkunqwgpzbiwdak.supabase.co" >> local.properties
+          echo "SUPABASE_KEY=sb_publishable_LggEu5U2E1Wg-lp1b2ih3g_tNpSfrIG" >> local.properties
 
       - name: Run unit tests
         run: gradle -p apps/calorie-tracker testDebugUnitTest --stacktrace
