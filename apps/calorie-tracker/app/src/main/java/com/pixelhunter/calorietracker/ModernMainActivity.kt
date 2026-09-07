@@ -85,10 +85,21 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
     }
     val scanner = remember(context) { GmsBarcodeScanning.getClient(context, scannerOptions) }
 
+    fun openPhoto() = context.startActivity(Intent(context, PhotoMealAnalysisActivity::class.java))
+    fun openVoice() = context.startActivity(Intent(context, VoiceLogActivity::class.java))
+    fun scannerFallback(error: Exception? = null) {
+        vm.showMessage(BarcodeSupport.scannerFailureMessage(error?.localizedMessage))
+        showManualBarcode = true
+    }
+
     fun scanBarcode() {
-        scanner.startScan()
-            .addOnSuccessListener { barcode -> barcode.rawValue?.let(vm::lookupBarcode) ?: run { showManualBarcode = true } }
-            .addOnFailureListener { showManualBarcode = true }
+        runCatching {
+            scanner.startScan()
+                .addOnSuccessListener { barcode ->
+                    BarcodeSupport.normalize(barcode.rawValue)?.let(vm::lookupBarcode) ?: scannerFallback()
+                }
+                .addOnFailureListener { scannerFallback(it) }
+        }.onFailure { scannerFallback(it as? Exception) }
     }
 
     LaunchedEffect(authRefreshKey) {
@@ -138,7 +149,7 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
             TopAppBar(
                 title = {
                     Column {
-                        Text(if (tab == MainTab.HOME) "Bugün Harika Gidiyorsun" else tab.label, fontWeight = FontWeight.Bold)
+                        Text(if (tab == MainTab.HOME) "Bugün" else tab.label, fontWeight = FontWeight.Bold)
                         if (tab == MainTab.HOME) Text(todayTurkish(), style = MaterialTheme.typography.labelSmall, color = KaloriMuted)
                     }
                 },
@@ -174,15 +185,7 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
                 }
             }
         },
-        floatingActionButton = {
-            if (tab == MainTab.HOME || tab == MainTab.DIARY) {
-                FloatingActionButton(
-                    onClick = { showFoodSearch = true },
-                    containerColor = KaloriGreen,
-                    contentColor = Color.Black
-                ) { Icon(Icons.Filled.Add, "Yemek ekle") }
-            }
-        }
+        floatingActionButton = {}
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
@@ -192,7 +195,9 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
                     onAddWater = { waterMl = store.addWater(250) },
                     onRemoveWater = { waterMl = store.removeWater(250) },
                     onFood = { showFoodSearch = true },
+                    onPhoto = ::openPhoto,
                     onBarcode = ::scanBarcode,
+                    onVoice = ::openVoice,
                     onGoal = { showGoalDialog = true }
                 )
                 MainTab.DIARY -> DiaryScreen(state, onFood = { showFoodSearch = true }, onRepeat = vm::addRecentFood)
@@ -236,7 +241,9 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
             onBarcode = {
                 showFoodSearch = false
                 scanBarcode()
-            }
+            },
+            onPhoto = { showFoodSearch = false; openPhoto() },
+            onVoice = { showFoodSearch = false; openVoice() }
         )
     }
 
@@ -366,7 +373,9 @@ private fun HomeScreen(
     onAddWater: () -> Unit,
     onRemoveWater: () -> Unit,
     onFood: () -> Unit,
+    onPhoto: () -> Unit,
     onBarcode: () -> Unit,
+    onVoice: () -> Unit,
     onGoal: () -> Unit
 ) {
     val goal = state.calorieGoal.coerceAtLeast(1)
@@ -375,36 +384,36 @@ private fun HomeScreen(
     val carbsGoal = (goal * 0.45 / 4).toInt().coerceAtLeast(1)
     val fatGoal = (goal * 0.25 / 9).toInt().coerceAtLeast(1)
 
-    LazyColumn(contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 110.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(contentPadding = PaddingValues(16.dp, 10.dp, 16.dp, 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             AccentCard {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(132.dp), contentAlignment = Alignment.Center) {
+                Text("Bugünkü kalori", color = KaloriMuted, style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Box(Modifier.size(150.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(
                             progress = { (state.caloriesToday / goal).toFloat().coerceIn(0f, 1f) },
                             modifier = Modifier.fillMaxSize(),
-                            strokeWidth = 11.dp,
+                            strokeWidth = 14.dp,
                             color = KaloriGreen,
-                            trackColor = Color(0xFF1B3029)
+                            trackColor = Color(0xFF1D2B26)
                         )
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Filled.LocalFireDepartment, null, tint = KaloriYellow)
                             Text(state.caloriesToday.toInt().toString(), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                            Text("/ $goal kcal", style = MaterialTheme.typography.labelMedium, color = KaloriMuted)
+                            Text("Tüketilen kcal", style = MaterialTheme.typography.labelSmall, color = KaloriMuted)
                         }
                     }
-                    Spacer(Modifier.width(22.dp))
-                    Column {
-                        Text("Kalan", color = KaloriMuted)
-                        Text("$remaining", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
-                        Text("kcal", color = KaloriMuted)
-                        TextButton(onClick = onGoal) { Text("Hedefi düzenle") }
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        CaloriesMetric("Hedef", goal.toString(), KaloriText)
+                        CaloriesMetric("Yenen", state.caloriesToday.toInt().toString(), KaloriGreen)
+                        CaloriesMetric("Kalan", remaining.toString(), KaloriBlue)
                     }
                 }
+                TextButton(onClick = onGoal, modifier = Modifier.align(Alignment.End)) { Text("Hedefi düzenle") }
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MacroCard("Protein", state.proteinToday.toInt(), proteinGoal, KaloriGreen, Modifier.weight(1f))
                 MacroCard("Karbonhidrat", state.carbsToday.toInt(), carbsGoal, KaloriBlue, Modifier.weight(1f))
                 MacroCard("Yağ", state.fatToday.toInt(), fatGoal, KaloriYellow, Modifier.weight(1f))
@@ -415,32 +424,66 @@ private fun HomeScreen(
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.WaterDrop, null, tint = KaloriBlue, modifier = Modifier.size(32.dp))
                     Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Su", fontWeight = FontWeight.Bold)
-                        Text("${waterMl / 1000.0} / 2.5 L", color = KaloriMuted)
-                        LinearProgressIndicator(progress = { (waterMl / 2500f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth(), color = KaloriBlue)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("Günlük Su", fontWeight = FontWeight.Bold)
+                        Text("$waterMl ml / 2500 ml", color = KaloriMuted)
+                        LinearProgressIndicator(progress = { (waterMl / 2500f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(7.dp), color = KaloriBlue, trackColor = Color(0xFF1C2C2B))
                     }
-                    IconButton(onClick = onRemoveWater, enabled = waterMl > 0) { Icon(Icons.Filled.Remove, "250 ml çıkar") }
-                    FilledTonalButton(onClick = onAddWater) { Text("+250 ml") }
+                    FilledTonalButton(onClick = onRemoveWater, enabled = waterMl > 0) { Text("−250") }
+                    FilledTonalButton(onClick = onAddWater) { Text("+250") }
                 }
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = onFood, modifier = Modifier.weight(1f).height(52.dp)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(6.dp)); Text("Yemek Ekle") }
-                OutlinedButton(onClick = onBarcode, modifier = Modifier.weight(1f).height(52.dp)) { Icon(Icons.Filled.QrCodeScanner, null); Spacer(Modifier.width(6.dp)); Text("Barkod") }
+            SectionTitle("Hızlı Ekle")
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuickActionCard("Yemek", Icons.Filled.Add, KaloriGreen, onFood, Modifier.weight(1f))
+                QuickActionCard("Fotoğraf", Icons.Filled.PhotoCamera, KaloriGreenSoft, onPhoto, Modifier.weight(1f))
             }
         }
-        if (state.recentFoods.isNotEmpty()) item {
-            SectionTitle("Son kullanılanlar")
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                QuickActionCard("Barkod", Icons.Filled.QrCodeScanner, KaloriBlue, onBarcode, Modifier.weight(1f))
+                QuickActionCard("Sesle Ekle", Icons.Filled.Mic, KaloriYellow, onVoice, Modifier.weight(1f))
+            }
+        }
+        if (state.todayEntries.isEmpty()) item {
             AccentCard {
-                state.recentFoods.take(4).forEach { food ->
+                Icon(Icons.Filled.RestaurantMenu, null, tint = KaloriMuted, modifier = Modifier.size(30.dp))
+                Text("Henüz öğün eklemedin", fontWeight = FontWeight.Bold)
+                Text("İlk öğününü ekleyerek günlük özetini burada gör.", color = KaloriMuted)
+                Button(onClick = onFood, colors = ButtonDefaults.buttonColors(containerColor = KaloriGreen, contentColor = Color.Black)) { Text("İlk öğününü ekle") }
+            }
+        } else item {
+            SectionTitle("Bugünkü öğünler")
+            AccentCard {
+                state.todayEntries.take(4).forEach { food ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
                         Text(food.foodName, Modifier.weight(1f))
                         Text("${food.calories.toInt()} kcal", color = KaloriMuted)
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CaloriesMetric(label: String, value: String, color: Color) {
+    Column {
+        Text(label, color = KaloriMuted, style = MaterialTheme.typography.labelSmall)
+        Text(value, color = color, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+    }
+}
+
+@Composable
+private fun QuickActionCard(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, accent: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(onClick = onClick, modifier = modifier.height(88.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = KaloriSurfaceAlt)) {
+        Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Icon(icon, label, tint = accent)
+            Text(label, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -598,7 +641,9 @@ private fun FoodSearchDialog(
     onAddCatalog: (CatalogFood, String, Double) -> Unit,
     onRepeat: (CalorieEntry) -> Unit,
     onManual: (String, String, Double, Double, Double, Double, Double) -> Unit,
-    onBarcode: () -> Unit
+    onBarcode: () -> Unit,
+    onPhoto: () -> Unit,
+    onVoice: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf<CatalogFood?>(null) }
@@ -612,9 +657,14 @@ private fun FoodSearchDialog(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(query, { query = it }, label = { Text("Yiyecek ara") }, leadingIcon = { Icon(Icons.Filled.Search, null) }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = onBarcode, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.QrCodeScanner, null); Spacer(Modifier.width(5.dp)); Text("Barkod") }
-                    OutlinedButton(onClick = { showManual = true }, modifier = Modifier.weight(1f)) { Text("Manuel") }
+                    FilledTonalButton(onClick = { query = "" }, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.Search, null); Spacer(Modifier.width(5.dp)); Text("Ara") }
+                    FilledTonalButton(onClick = onPhoto, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.PhotoCamera, null); Spacer(Modifier.width(5.dp)); Text("Fotoğraf") }
                 }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(onClick = onBarcode, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.QrCodeScanner, null); Spacer(Modifier.width(5.dp)); Text("Barkod") }
+                    FilledTonalButton(onClick = onVoice, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.Mic, null); Spacer(Modifier.width(5.dp)); Text("Ses") }
+                }
+                OutlinedButton(onClick = { showManual = true }, modifier = Modifier.fillMaxWidth()) { Text("Manuel yemek oluştur") }
                 if (favorites.isNotEmpty()) {
                     Text("Favoriler", fontWeight = FontWeight.Bold)
                     favorites.take(4).forEach { food -> FoodResultRow(food, true, { onToggleFavorite(food) }) { selected = food } }
@@ -759,11 +809,12 @@ private fun NumberField(label: String, value: String, onValue: (String) -> Unit)
 
 @Composable
 private fun MacroCard(title: String, value: Int, goal: Int, color: Color, modifier: Modifier = Modifier) {
-    Card(modifier, colors = CardDefaults.cardColors(containerColor = KaloriSurface)) {
-        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(title, style = MaterialTheme.typography.labelSmall, color = color)
+    Card(modifier.heightIn(min = 96.dp), colors = CardDefaults.cardColors(containerColor = KaloriSurface)) {
+        Column(Modifier.padding(11.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Icon(if (title == "Protein") Icons.Filled.FitnessCenter else if (title == "Karbonhidrat") Icons.Filled.Bolt else Icons.Filled.Opacity, null, tint = color, modifier = Modifier.size(17.dp))
+            Text(title, style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1)
             Text("$value / $goal g", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
-            LinearProgressIndicator(progress = { (value / goal.toFloat()).coerceIn(0f, 1f) }, color = color, modifier = Modifier.fillMaxWidth())
+            LinearProgressIndicator(progress = { (value / goal.toFloat()).coerceIn(0f, 1f) }, color = color, trackColor = Color(0xFF26332F), modifier = Modifier.fillMaxWidth().height(7.dp))
         }
     }
 }

@@ -2,6 +2,12 @@ name: Calorie Tracker AAB
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/calorie-tracker-v1
+    paths:
+      - 'apps/calorie-tracker/**'
+      - '.github/workflows/calorie-tracker-aab.yml'
   pull_request:
     paths:
       - 'apps/calorie-tracker/**'

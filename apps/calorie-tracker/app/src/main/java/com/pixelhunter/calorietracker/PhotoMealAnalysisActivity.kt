@@ -3,12 +3,14 @@ package com.pixelhunter.calorietracker
 import android.net.Uri
 import android.os.Bundle
 import android.util.Base64
+import android.graphics.BitmapFactory
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,6 +22,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -84,6 +88,9 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
     var analysis by remember { mutableStateOf<AiMealAnalysis?>(null) }
     var loading by remember { mutableStateOf(false) }
     var mealType by remember { mutableStateOf("Öğle") }
+    val previewBitmap = selectedUri?.let { uri ->
+        remember(uri) { runCatching { context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }?.asImageBitmap() }.getOrNull() }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         selectedUri = uri
@@ -165,6 +172,12 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold
                             )
+                        }
+
+                        previewBitmap?.let { bitmap ->
+                            Card(shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = KaloriSurfaceAlt)) {
+                                Image(bitmap = bitmap, contentDescription = "Seçilen yemek fotoğrafı", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().height(220.dp))
+                            }
                         }
 
                         Button(
@@ -281,7 +294,7 @@ private suspend fun analyzePhotoBytes(bytes: ByteArray, mimeType: String): AiMea
         val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
         val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
         if (responseCode == 503 && text.contains("ai_not_configured")) {
-            error("AI fotoğraf analizi için sunucu anahtarı henüz yapılandırılmadı")
+            error("AI fotoğraf analizi henüz yapılandırılmadı")
         }
         if (responseCode !in 200..299) error("Fotoğraf analizi başarısız ($responseCode)")
         Json { ignoreUnknownKeys = true }.decodeFromString<AiMealAnalysis>(text)

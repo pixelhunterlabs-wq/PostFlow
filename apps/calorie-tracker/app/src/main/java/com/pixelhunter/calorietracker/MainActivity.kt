@@ -83,24 +83,6 @@ data class WeightEntry(
     fun dateText(): String = measuredAt.take(10)
 }
 
-@Serializable
-private data class OffResponse(val status: Int = 0, val product: OffProduct? = null)
-
-@Serializable
-private data class OffProduct(
-    @SerialName("product_name") val productName: String? = null,
-    val brands: String? = null,
-    val nutriments: OffNutriments? = null
-)
-
-@Serializable
-private data class OffNutriments(
-    @SerialName("energy-kcal_100g") val calories100g: Double? = null,
-    @SerialName("proteins_100g") val protein100g: Double? = null,
-    @SerialName("carbohydrates_100g") val carbs100g: Double? = null,
-    @SerialName("fat_100g") val fat100g: Double? = null
-)
-
 data class BarcodeProduct(
     val barcode: String,
     val name: String,
@@ -189,6 +171,7 @@ class TrackerViewModel : ViewModel() {
     init { refreshSessionAndData() }
 
     fun consumeMessage() { uiState = uiState.copy(message = null) }
+    fun showMessage(message: String) { uiState = uiState.copy(message = message) }
     fun clearBarcodeProduct() { uiState = uiState.copy(barcodeProduct = null) }
 
     fun refreshSessionAndData() {
@@ -268,8 +251,8 @@ class TrackerViewModel : ViewModel() {
     }
 
     fun lookupBarcode(barcode: String) {
-        val clean = barcode.filter(Char::isDigit)
-        if (clean.length !in 8..14) {
+        val clean = BarcodeSupport.normalize(barcode)
+        if (clean == null) {
             uiState = uiState.copy(message = "Geçerli bir ürün barkodu okunamadı")
             return
         }
@@ -288,28 +271,17 @@ class TrackerViewModel : ViewModel() {
                     }
                     try {
                         if (connection.responseCode !in 200..299) error("Ürün servisine ulaşılamadı")
-                        json.decodeFromString<OffResponse>(connection.inputStream.bufferedReader().use { it.readText() })
+                        BarcodeSupport.parseOpenFoodFacts(clean, connection.inputStream.bufferedReader().use { it.readText() })
                     } finally { connection.disconnect() }
                 }
-            }.onSuccess { response ->
-                val product = response.product
-                val nutrients = product?.nutriments
-                if (response.status != 1 || product == null) {
+            }.onSuccess { product ->
+                if (product == null) {
                     uiState = uiState.copy(barcodeLoading = false, message = "Ürün Open Food Facts veritabanında bulunamadı")
                     return@onSuccess
                 }
-                val name = product.productName?.trim().orEmpty().ifBlank { product.brands?.trim().orEmpty() }.ifBlank { "Barkodlu ürün" }
                 uiState = uiState.copy(
                     barcodeLoading = false,
-                    barcodeProduct = BarcodeProduct(
-                        barcode = clean,
-                        name = name,
-                        brand = product.brands.orEmpty(),
-                        calories100g = nutrients?.calories100g ?: 0.0,
-                        protein100g = nutrients?.protein100g ?: 0.0,
-                        carbs100g = nutrients?.carbs100g ?: 0.0,
-                        fat100g = nutrients?.fat100g ?: 0.0
-                    )
+                    barcodeProduct = product
                 )
             }.onFailure { uiState = uiState.copy(barcodeLoading = false, message = it.message ?: "Barkod ürünü alınamadı") }
         }
