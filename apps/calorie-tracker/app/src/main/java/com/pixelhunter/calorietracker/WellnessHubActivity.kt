@@ -113,6 +113,37 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
+                Text("Hızlı araçlar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ToolCard(
+                        icon = Icons.Filled.Mic,
+                        title = "Sesle Ekle",
+                        subtitle = "Yemeğini söyle",
+                        modifier = Modifier.weight(1f)
+                    ) { context.startActivity(Intent(context, VoiceLogActivity::class.java)) }
+                    ToolCard(
+                        icon = Icons.Filled.RestaurantMenu,
+                        title = "Tarif Oluştur",
+                        subtitle = "Öğününü kaydet",
+                        modifier = Modifier.weight(1f)
+                    ) { context.startActivity(Intent(context, RecipeBuilderActivity::class.java)) }
+                }
+            }
+
+            item {
+                ToolCard(
+                    icon = Icons.Filled.PhotoCamera,
+                    title = "Fotoğraftan AI Analiz",
+                    subtitle = "Fotoğraftan yiyecek, porsiyon ve makro tahmini",
+                    modifier = Modifier.fillMaxWidth(),
+                    emphasized = true
+                ) { context.startActivity(Intent(context, PhotoMealAnalysisActivity::class.java)) }
+            }
+
+            item {
                 HubCard {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.DirectionsWalk, null, tint = KaloriGreen, modifier = Modifier.size(34.dp))
@@ -167,7 +198,7 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
             item {
                 HubCard {
                     Text("Dinamik kalori hedefi", fontWeight = FontWeight.Bold)
-                    Text("Kilo trendine göre hedefi haftalık olarak ayarlamak için öneri üretir.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+                    Text("Kilo trendine göre haftalık kalori hedefi önerir; sen onaylamadan değiştirmez.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf(0.0, 0.25, 0.5, 0.75).forEach { value ->
@@ -258,6 +289,35 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
                 message = "Öğün kaydedildi"
             }
         )
+    }
+}
+
+@Composable
+private fun ToolCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    emphasized: Boolean = false,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = if (emphasized) Color(0xFF0E2A1D) else KaloriSurface),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = RoundedCornerShape(14.dp), color = Color(0xFF173729)) {
+                Icon(icon, null, tint = KaloriGreen, modifier = Modifier.padding(10.dp).size(24.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+            }
+            Icon(Icons.Filled.ChevronRight, null, tint = KaloriMuted)
+        }
     }
 }
 
