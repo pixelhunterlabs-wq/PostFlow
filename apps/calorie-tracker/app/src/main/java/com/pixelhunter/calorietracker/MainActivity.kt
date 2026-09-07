@@ -327,7 +327,7 @@ class TrackerViewModel : ViewModel() {
         val client = supabase ?: return
         viewModelScope.launch {
             runCatching { client.from("calorie_food_entries").delete { filter { eq("id", entryId) } }; loadAll(); uiState = uiState.copy(message = "Yemek kaydı silindi") }
-                .onFailure { uiState = uiState.copy(message = it.message ?: "Yemek silinemedi") }
+                .onFailure { uiState = uiState.copy(message = "Öğün silinemedi. Lütfen tekrar deneyin.") }
         }
     }
 

@@ -5,6 +5,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -72,6 +76,7 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
     var showWeightDialog by remember { mutableStateOf(false) }
     var showGoalDialog by remember { mutableStateOf(false) }
     var showManualBarcode by remember { mutableStateOf(false) }
+    var pendingMealDelete by remember { mutableStateOf<CalorieEntry?>(null) }
     var showDeleteAccount by remember { mutableStateOf(false) }
     var waterMl by remember { mutableIntStateOf(store.waterMl()) }
     var favorites by remember { mutableStateOf(store.favorites()) }
@@ -200,7 +205,7 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
                     onVoice = ::openVoice,
                     onGoal = { showGoalDialog = true }
                 )
-                MainTab.DIARY -> DiaryScreen(state, onFood = { showFoodSearch = true }, onRepeat = vm::addRecentFood)
+                MainTab.DIARY -> DiaryScreen(state, onFood = { showFoodSearch = true }, onRepeat = vm::addRecentFood, onLongPressEntry = { pendingMealDelete = it })
                 MainTab.PROGRESS -> ProgressScreen(state, onWeight = { showWeightDialog = true })
                 MainTab.PROFILE -> ProfileScreen(
                     state = state,
@@ -258,6 +263,18 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
     if (showManualBarcode) BarcodeInputDialog({ showManualBarcode = false }) {
         vm.lookupBarcode(it)
         showManualBarcode = false
+    }
+    pendingMealDelete?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { pendingMealDelete = null },
+            containerColor = KaloriDialog,
+            titleContentColor = KaloriText,
+            textContentColor = KaloriMuted,
+            title = { Text("Öğünü sil", fontWeight = FontWeight.Bold) },
+            text = { Text("${entry.foodName} kaydını silmek istiyor musun?") },
+            confirmButton = { Button(onClick = { vm.deleteFood(entry.id); pendingMealDelete = null }, colors = ButtonDefaults.buttonColors(containerColor = KaloriDanger, contentColor = Color.White)) { Text("Sil") } },
+            dismissButton = { TextButton(onClick = { pendingMealDelete = null }) { Text("Vazgeç", color = KaloriGreen) } }
+        )
     }
     state.barcodeProduct?.let { product ->
         ModernBarcodeProductDialog(product, vm::clearBarcodeProduct) { meal, grams -> vm.addBarcodeFood(product, meal, grams) }
@@ -488,8 +505,9 @@ private fun QuickActionCard(label: String, icon: androidx.compose.ui.graphics.ve
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DiaryScreen(state: TrackerUiState, onFood: () -> Unit, onRepeat: (CalorieEntry) -> Unit) {
+private fun DiaryScreen(state: TrackerUiState, onFood: () -> Unit, onRepeat: (CalorieEntry) -> Unit, onLongPressEntry: (CalorieEntry) -> Unit) {
     val meals = listOf("Kahvaltı", "Öğle", "Akşam", "Atıştırmalık", "Öğün")
     LazyColumn(contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 110.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
@@ -498,6 +516,7 @@ private fun DiaryScreen(state: TrackerUiState, onFood: () -> Unit, onRepeat: (Ca
                 Button(onClick = onFood) { Text("+ Yemek") }
             }
         }
+        item { Text("Düzeltmek veya silmek için öğüne basılı tut.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall) }
         meals.forEach { meal ->
             val entries = state.todayEntries.filter { normalizeMeal(it.mealType) == meal }
             if (entries.isNotEmpty() || meal != "Öğün") {
@@ -506,7 +525,8 @@ private fun DiaryScreen(state: TrackerUiState, onFood: () -> Unit, onRepeat: (Ca
                     AccentCard {
                         if (entries.isEmpty()) Text("Henüz kayıt yok", color = KaloriMuted)
                         entries.forEach { entry ->
-                            Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                            val haptics = LocalHapticFeedback.current
+                            Row(Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onLongPressEntry(entry) }).padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text(entry.foodName, fontWeight = FontWeight.SemiBold)
                                     Text("${entry.grams.toInt()} g • P ${entry.proteinG.toInt()} • K ${entry.carbsG.toInt()} • Y ${entry.fatG.toInt()}", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
