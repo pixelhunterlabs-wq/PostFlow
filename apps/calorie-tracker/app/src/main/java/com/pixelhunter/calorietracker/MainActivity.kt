@@ -114,6 +114,8 @@ data class BarcodeProduct(
 data class DailyTotal(val date: LocalDate, val calories: Double)
 
 object SupabaseProvider {
+    const val oauthRedirectUrl = "calorietracker://login"
+
     val configured: Boolean
         get() = BuildConfig.SUPABASE_URL.isNotBlank() && BuildConfig.SUPABASE_KEY.isNotBlank()
 
@@ -211,8 +213,18 @@ class TrackerViewModel : ViewModel() {
     fun signInWithGoogle() {
         val client = supabase ?: return
         viewModelScope.launch {
-            runCatching { client.auth.signInWith(Google) }
-                .onFailure { uiState = uiState.copy(message = it.message ?: "Google girişi başlatılamadı") }
+            // signInWith returns as soon as the browser/custom tab is opened. Keep the
+            // button disabled until the callback is handled, so duplicate OAuth flows
+            // cannot be started from the login screen.
+            uiState = uiState.copy(loading = true, message = null)
+            runCatching {
+                client.auth.signInWith(Google, redirectUrl = SupabaseProvider.oauthRedirectUrl)
+            }.onFailure {
+                uiState = uiState.copy(
+                    loading = false,
+                    message = it.message ?: "Google girişi başlatılamadı"
+                )
+            }
         }
     }
 

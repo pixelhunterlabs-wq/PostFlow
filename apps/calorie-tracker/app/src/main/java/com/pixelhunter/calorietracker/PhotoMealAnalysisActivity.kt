@@ -1,6 +1,5 @@
 package com.pixelhunter.calorietracker
 
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.util.Base64
@@ -9,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -32,7 +32,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.io.ByteArrayOutputStream
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -80,22 +80,26 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var selectedUri by remember { mutableStateOf<Uri?>(null) }
-    var capturedBytes by remember { mutableStateOf<ByteArray?>(null) }
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     var analysis by remember { mutableStateOf<AiMealAnalysis?>(null) }
     var loading by remember { mutableStateOf(false) }
     var mealType by remember { mutableStateOf("Öğle") }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         selectedUri = uri
-        capturedBytes = null
+        pendingCameraUri = null
         analysis = null
     }
 
-    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
-        if (bitmap != null) {
-            capturedBytes = bitmap.toJpegBytes()
-            selectedUri = null
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+        if (saved) {
+            selectedUri = pendingCameraUri
             analysis = null
+        } else {
+            // FileProvider exposes a cache file; a failed camera result must not crash
+            // the UI while its cache entry is being cleaned up by Android.
+            pendingCameraUri?.let { uri -> runCatching { context.contentResolver.delete(uri, null, null) } }
+            pendingCameraUri = null
         }
     }
 
@@ -128,7 +132,15 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
 
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(
-                                onClick = { camera.launch(null) },
+                                onClick = {
+                                    val uri = FileProvider.getUriForFile(
+                                        context,
+                                        "${context.packageName}.fileprovider",
+                                        File.createTempFile("meal_", ".jpg", context.cacheDir)
+                                    )
+                                    pendingCameraUri = uri
+                                    camera.launch(uri)
+                                },
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.buttonColors(containerColor = KaloriGreen, contentColor = Color.Black)
                             ) {
@@ -146,9 +158,9 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
                             }
                         }
 
-                        if (capturedBytes != null || selectedUri != null) {
+                        if (selectedUri != null) {
                             Text(
-                                if (capturedBytes != null) "✓ Kamera fotoğrafı hazır" else "✓ Galeriden fotoğraf seçildi",
+                                if (pendingCameraUri == selectedUri) "✓ Kamera fotoğrafı hazır" else "✓ Galeriden fotoğraf seçildi",
                                 color = KaloriGreen,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.SemiBold
@@ -156,13 +168,12 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
                         }
 
                         Button(
-                            enabled = (capturedBytes != null || selectedUri != null) && !loading,
+                            enabled = selectedUri != null && !loading,
                             onClick = {
                                 scope.launch {
                                     loading = true
                                     runCatching {
-                                        capturedBytes?.let { analyzePhotoBytes(it, "image/jpeg") }
-                                            ?: selectedUri?.let { analyzePhoto(context, it) }
+                                        selectedUri?.let { analyzePhoto(context, it) }
                                             ?: error("Önce fotoğraf çek veya seç")
                                     }
                                         .onSuccess { analysis = it }
@@ -241,12 +252,6 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
             }
         }
     }
-}
-
-private fun Bitmap.toJpegBytes(): ByteArray {
-    val output = ByteArrayOutputStream()
-    compress(Bitmap.CompressFormat.JPEG, 88, output)
-    return output.toByteArray()
 }
 
 private suspend fun analyzePhoto(context: android.content.Context, uri: Uri): AiMealAnalysis = withContext(Dispatchers.IO) {

@@ -128,10 +128,17 @@ Use the publishable key only. Never place a secret/service-role key in the Andro
 
 Supabase Auth setup:
 
-1. Enable Google provider in the shared project.
-2. Configure Google OAuth Client ID / Client Secret.
-3. Add `calorietracker://login` to allowed redirect URLs.
-4. Open this folder in Android Studio, sync Gradle and run `app`.
+1. In Supabase Dashboard → Authentication → Providers → Google, enable Google and enter the Google **Web application** OAuth client ID and client secret.
+2. In Google Cloud Console → Google Auth Platform → Clients → that Web application client, add this exact Authorized redirect URI:
+   `https://jecbdzkunqwgpzbiwdak.supabase.co/auth/v1/callback`
+3. In Supabase Dashboard → Authentication → URL Configuration → Redirect URLs, add this exact mobile callback:
+   `calorietracker://login`
+4. Keep `calorietracker://login` in `ModernMainActivity`'s Android intent filter and in `SupabaseProvider.oauthRedirectUrl`; the values must match exactly.
+5. Open this folder in Android Studio, sync Gradle and run `app`.
+
+The Google Cloud Console callback is the Supabase HTTPS callback in step 2. Do not add the
+custom `calorietracker://` URI to Google Cloud; Supabase validates that mobile URI in step 3
+and redirects to it after it completes the Google callback.
 
 ## Toolchain
 

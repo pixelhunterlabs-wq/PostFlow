@@ -26,6 +26,7 @@ import com.google.android.gms.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.android.gms.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import io.github.jan.supabase.auth.handleDeeplinks
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -38,6 +39,11 @@ class ModernMainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         SupabaseProvider.client?.handleDeeplinks(intent)
+        // A process launched directly by the OAuth callback has no onNewIntent call.
+        // Trigger the same post-callback refresh path in that case.
+        if (intent?.data?.scheme == "calorietracker" && intent.data?.host == "login") {
+            authCallbackTick++
+        }
         setContent {
             KaloriDarkTheme {
                 ModernTrackerApp(authRefreshKey = authCallbackTick)
@@ -85,7 +91,12 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
             .addOnFailureListener { showManualBarcode = true }
     }
 
-    LaunchedEffect(authRefreshKey) { vm.refreshSessionAndData() }
+    LaunchedEffect(authRefreshKey) {
+        // Give supabase-kt a moment to import the session parsed by handleDeeplinks
+        // before asking currentUserOrNull() for it.
+        if (authRefreshKey > 0) delay(250)
+        vm.refreshSessionAndData()
+    }
     LaunchedEffect(state.message) {
         state.message?.let {
             snackbar.showSnackbar(it)
@@ -99,7 +110,11 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
     }
 
     if (!state.signedIn) {
-        LoginScreen(onGoogle = vm::signInWithGoogle)
+        LoginScreen(
+            loading = state.loading,
+            message = state.message,
+            onGoogle = vm::signInWithGoogle
+        )
         return
     }
 
@@ -252,7 +267,7 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
 }
 
 @Composable
-private fun LoginScreen(onGoogle: () -> Unit) {
+private fun LoginScreen(loading: Boolean, message: String?, onGoogle: () -> Unit) {
     Column(
         Modifier.fillMaxSize().padding(28.dp),
         verticalArrangement = Arrangement.Center,
@@ -265,7 +280,27 @@ private fun LoginScreen(onGoogle: () -> Unit) {
         Text("Kalori Takip", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
         Text("Türkiye odaklı sade kalori ve makro takibi", color = KaloriMuted)
         Spacer(Modifier.height(28.dp))
-        Button(onClick = onGoogle, modifier = Modifier.fillMaxWidth().height(54.dp)) { Text("Google ile devam et") }
+        Button(
+            enabled = !loading,
+            onClick = onGoogle,
+            modifier = Modifier.fillMaxWidth().height(54.dp)
+        ) {
+            if (loading) {
+                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.Black)
+                Spacer(Modifier.width(8.dp))
+                Text("Google açılıyor…")
+            } else {
+                Text("Google ile devam et")
+            }
+        }
+        if (loading) {
+            Spacer(Modifier.height(12.dp))
+            Text("Tarayıcıda Google hesabını seçerek devam et.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+        }
+        message?.let {
+            Spacer(Modifier.height(12.dp))
+            Text(it, color = KaloriDanger, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 
