@@ -1,5 +1,6 @@
 package com.pixelhunter.calorietracker
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -69,6 +70,30 @@ private fun RecipeBuilderScreen() {
             contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 40.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF0E2A1D)), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.AutoAwesome, null, tint = KaloriGreen)
+                            Spacer(Modifier.width(8.dp))
+                            Column {
+                                Text("Fotoğraftan AI Analiz", fontWeight = FontWeight.Bold)
+                                Text("Yemeğin fotoğrafından porsiyon ve makro tahmini al", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        Button(
+                            onClick = { context.startActivity(Intent(context, PhotoMealAnalysisActivity::class.java)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = KaloriGreen, contentColor = Color.Black)
+                        ) {
+                            Icon(Icons.Filled.PhotoCamera, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Fotoğraf seç ve analiz et")
+                        }
+                    }
+                }
+            }
+
             item {
                 OutlinedTextField(
                     value = recipeName,
