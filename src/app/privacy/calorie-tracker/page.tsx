@@ -9,13 +9,22 @@ export default function CalorieTrackerPrivacyPage() {
       <article style={{ maxWidth: 760, margin: "0 auto", lineHeight: 1.7 }}>
         <h1 style={{ fontSize: 34, marginBottom: 8 }}>Kalori Takip Gizlilik Politikası</h1>
         <p style={{ color: "#9da9a5" }}><strong style={{ color: "#fff" }}>Son güncelleme:</strong> 7 Eylül 2026</p>
-        <p>Kalori Takip, kullanıcıların günlük kalori ve makro besin kayıtlarını, kilo geçmişini, su tüketimini ve kişisel hedeflerini takip etmelerine yardımcı olan bir sağlık ve beslenme uygulamasıdır.</p>
+        <p>Kalori Takip, kullanıcıların günlük kalori ve makro besin kayıtlarını, kilo geçmişini, su tüketimini, fiziksel aktivite verilerini ve kişisel hedeflerini takip etmelerine yardımcı olan bir sağlık ve beslenme uygulamasıdır.</p>
 
-        <Section title="Toplanan veriler">
-          Google ile giriş yaptığınızda hesap kimliği ve e-posta adresi gibi temel hesap bilgileri alınabilir. Uygulamada oluşturduğunuz kalori kayıtları, yiyecek adı, gram, kalori, protein, karbonhidrat ve yağ değerleri; kilo kayıtları ve günlük kalori hedefleri hesabınıza bağlı olarak saklanabilir. Su takibi ve favori yiyecek tercihleri cihaz üzerinde yerel olarak tutulabilir.
+        <Section title="Toplanan ve işlenen veriler">
+          Google ile giriş yaptığınızda hesap kimliği ve e-posta adresi gibi temel hesap bilgileri alınabilir. Uygulamada oluşturduğunuz kalori kayıtları, yiyecek adı, gram, kalori, protein, karbonhidrat ve yağ değerleri; kilo kayıtları ve günlük kalori hedefleri hesabınıza bağlı olarak saklanabilir. Su takibi, favori yiyecekler, kayıtlı öğünler ve bildirim tercihleri cihaz üzerinde yerel olarak tutulabilir.
+        </Section>
+        <Section title="Health Connect ve adım verisi">
+          Kullanıcı açıkça izin verirse uygulama Android Health Connect üzerinden yalnızca adım sayısı verisini okuyabilir. Bu veri günlük aktivite bilgisini göstermek amacıyla kullanılır. Health Connect izni kullanıcı tarafından her zaman geri alınabilir. Adım verisi reklam hedefleme veya veri brokerı amacıyla kullanılmaz.
+        </Section>
+        <Section title="Öğün hatırlatmaları">
+          Kullanıcı isteğe bağlı olarak öğün bildirimlerini açabilir. Bildirim izni yalnızca kahvaltı, öğle ve akşam yemek kayıtlarını hatırlatmak amacıyla kullanılır. Hatırlatma tercihi cihaz üzerinde tutulur.
+        </Section>
+        <Section title="Dinamik kalori hedefi">
+          Dinamik hedef özelliği kullanıcının kendi kilo kayıtlarından hesaplanan kilo trendini, kullanıcının seçtiği haftalık hedefle karşılaştırarak günlük kalori hedefi için bir öneri üretir. Öneri otomatik uygulanmaz; kullanıcı onayıyla uygulanır. Bu hesap tıbbi öneri değildir.
         </Section>
         <Section title="Verilerin kullanım amacı">
-          Bu veriler yalnızca uygulamanın temel özelliklerini sağlamak, kayıtlarınızı cihazlar arasında senkronize etmek, geçmiş kalori ve kilo takibini göstermek, kişisel hedefleri hesaplamak ve hesabınızı yönetmek amacıyla kullanılır.
+          Veriler yalnızca uygulamanın temel özelliklerini sağlamak, kayıtlarınızı cihazlar arasında senkronize etmek, geçmiş kalori ve kilo takibini göstermek, aktivite ve kişisel hedefleri hesaplamak, öğün hatırlatmaları sağlamak ve hesabınızı yönetmek amacıyla kullanılır.
         </Section>
         <Section title="Barkod ve Open Food Facts">
           Barkod tarama özelliği Google Code Scanner kullanabilir. Okunan ürün barkodu, ürünün besin bilgilerini bulmak amacıyla Open Food Facts hizmetine gönderilebilir.
@@ -27,7 +36,7 @@ export default function CalorieTrackerPrivacyPage() {
           Uygulamadaki “Hesabımı ve verilerimi sil” seçeneğiyle bu uygulamaya bağlı kalori, makro, kilo, hedef ve profil kayıtlarınızı ve Kalori Takip hesabınızı kalıcı olarak silebilirsiniz.
         </Section>
         <Section title="Sağlık bilgileri hakkında">
-          Kalori Takip tıbbi teşhis, tedavi veya acil sağlık hizmeti sunmaz. Kalori hedefi hesaplamaları genel tahmin niteliğindedir ve profesyonel tıbbi tavsiyenin yerine geçmez.
+          Kalori Takip tıbbi teşhis, tedavi veya acil sağlık hizmeti sunmaz. Kalori hedefi ve kilo trendi gibi hesaplamalar genel tahmin niteliğindedir ve profesyonel tıbbi tavsiyenin yerine geçmez.
         </Section>
         <Section title="İletişim">
           Gizlilik veya veri silme talepleri için Google Play mağaza kaydında belirtilen geliştirici iletişim adresi kullanılabilir.
