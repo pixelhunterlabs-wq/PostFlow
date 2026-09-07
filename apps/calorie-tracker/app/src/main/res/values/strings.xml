@@ -6,4 +6,6 @@
     <string name="privacy_shortcut_long">Gizlilik Politikası</string>
     <string name="wellness_shortcut_short">Sağlık</string>
     <string name="wellness_shortcut_long">Sağlık ve Akıllı Takip</string>
+    <string name="voice_shortcut_short">Sesle Ekle</string>
+    <string name="voice_shortcut_long">Sesle Yemek Ekle</string>
 </resources>
