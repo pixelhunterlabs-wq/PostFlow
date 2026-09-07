@@ -13,6 +13,8 @@ Koyu ve modern arayüzde günlük kalori hedefini, kalan kaloriyi, protein, karb
 
 Türkiye'de sık tüketilen yiyeceklerden oluşan hızlı katalog sayesinde tavuk göğsü, yumurta, pilav, mercimek çorbası, menemen, simit, lahmacun, döner, ayran ve benzeri ürünleri daha hızlı ekleyebilirsin. Favorilerini kaydedebilir, sık kullandığın öğünleri saklayabilir ve son kullandığın yiyecekleri tek dokunuşla yeniden günlüğüne ekleyebilirsin.
 
+Tarif / öğün oluşturucuyla birden fazla yiyeceği gram miktarlarıyla birleştirip toplam kalori, protein, karbonhidrat ve yağ değerini görebilir; oluşturduğun öğünü daha sonra tek dokunuşla yeniden kullanmak üzere kaydedebilirsin.
+
 Sesle yemek ekleme özelliğinde “150 gram tavuk, 200 gram pilav ve bir bardak ayran” gibi ifadeleri söyleyebilir; tanınan yiyecekleri kontrol ettikten sonra günlüğüne ekleyebilirsin. Bu özellik cihazın Android konuşma tanıma hizmetini kullanır.
 
 Barkod tarama özelliği desteklenen ürünlerde Open Food Facts veritabanından ürün ve besin bilgilerini sorgular. Ürün bulunamazsa manuel kayıt seçeneğini kullanabilirsin.
@@ -30,6 +32,7 @@ Google ile giriş ve Supabase bulut senkronizasyonu sayesinde kalori, makro, kil
 - Kahvaltı, öğle, akşam ve atıştırmalık günlüğü
 - Türkiye odaklı hızlı yiyecek kataloğu
 - Favori yiyecekler ve kayıtlı öğünler
+- Tarif / öğün oluşturucu
 - Sesle yemek ekleme
 - Gram bazlı yiyecek kaydı
 - Barkod tarama ve Open Food Facts ürün sorgusu
@@ -57,7 +60,10 @@ Health & Fitness
 - Steps / Physical Activity (Health Connect READ_STEPS)
 
 ## İlk sürüm notu
-Koyu arayüz, Türkiye odaklı yiyecek kataloğu, günlük öğün takibi, favoriler, kayıtlı öğünler, sesle yemek ekleme, su takibi, Health Connect adımları, öğün bildirimleri, kilo geçmişi, dinamik hedef önerisi, haftalık rapor, barkod tarama, Google giriş ve bulut senkronizasyonu.
+Koyu arayüz, Türkiye odaklı yiyecek kataloğu, günlük öğün takibi, favoriler, kayıtlı öğünler ve tarif oluşturucu, sesle yemek ekleme, su takibi, Health Connect adımları, öğün bildirimleri, kilo geçmişi, dinamik hedef önerisi, haftalık rapor, barkod tarama, Google giriş ve bulut senkronizasyonu.
+
+## Hazır fakat yayında etkinleştirilmeden önce son test gerektiren özellik
+- Fotoğraftan AI yemek analizi: Android ekranı + authenticated Supabase Edge Function hazırdır. `OPENAI_API_KEY` Supabase secret olarak tanımlanıp gerçek cihaz testi geçmeden mağaza açıklamasında kullanıcı özelliği olarak vaat edilmemelidir.
 
 ## Yayın öncesi hesap / mağaza alanları
 - Destek e-posta adresi
@@ -68,4 +74,5 @@ Koyu arayüz, Türkiye odaklı yiyecek kataloğu, günlük öğün takibi, favor
 - Health Apps / Health Connect beyanı
 - Content rating
 - Mikrofon izni açıklaması
+- AI fotoğraf analizi etkinse Photos and videos / üçüncü taraf veri akışı beyanı
 - İmzalı production AAB yükleme
