@@ -652,6 +652,9 @@ private fun FoodSearchDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = KaloriDialog,
+        titleContentColor = KaloriText,
+        textContentColor = KaloriText,
         title = { Text("Yemek Ekle") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -708,6 +711,9 @@ private fun CatalogAmountDialog(food: CatalogFood, onDismiss: () -> Unit, onSave
     val value = grams.toDoubleOrNull() ?: 0.0
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = KaloriDialog,
+        titleContentColor = KaloriText,
+        textContentColor = KaloriText,
         title = { Text(food.name) },
         text = { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             MealSelector(meal) { meal = it }
@@ -724,6 +730,9 @@ private fun ManualFoodDialog(onDismiss: () -> Unit, onSave: (String, String, Dou
     var name by remember { mutableStateOf("") }; var meal by remember { mutableStateOf("Öğle") }; var grams by remember { mutableStateOf("") }; var calories by remember { mutableStateOf("") }; var protein by remember { mutableStateOf("") }; var carbs by remember { mutableStateOf("") }; var fat by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = KaloriDialog,
+        titleContentColor = KaloriText,
+        textContentColor = KaloriText,
         title = { Text("Manuel yemek") },
         text = { LazyColumn(Modifier.heightIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { OutlinedTextField(name, { name = it }, label = { Text("Yemek") }, singleLine = true) }
@@ -776,6 +785,9 @@ private fun BarcodeInputDialog(onDismiss: () -> Unit, onSearch: (String) -> Unit
     var barcode by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = KaloriDialog,
+        titleContentColor = KaloriText,
+        textContentColor = KaloriText,
         title = { Text("Barkod numarası") },
         text = { OutlinedTextField(barcode, { barcode = it.filter(Char::isDigit) }, label = { Text("EAN / UPC") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)) },
         confirmButton = { Button(enabled = barcode.length in 8..14, onClick = { onSearch(barcode) }) { Text("Ürünü bul") } },
@@ -788,6 +800,9 @@ private fun SimpleNumberDialog(title: String, suffix: String, onDismiss: () -> U
     var value by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = KaloriDialog,
+        titleContentColor = KaloriText,
+        textContentColor = KaloriText,
         title = { Text(title) },
         text = { NumberField(suffix, value) { value = it } },
         confirmButton = { Button(enabled = value.toDoubleOrNull() != null, onClick = { value.toDoubleOrNull()?.let(onSave) }) { Text("Kaydet") } },
@@ -803,7 +818,19 @@ private fun NumberField(label: String, value: String, onValue: (String) -> Unit)
         label = { Text(label) },
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = KaloriText,
+            unfocusedTextColor = KaloriText,
+            focusedContainerColor = KaloriInput,
+            unfocusedContainerColor = KaloriInput,
+            focusedBorderColor = KaloriGreen,
+            unfocusedBorderColor = KaloriBorder,
+            focusedLabelColor = KaloriGreen,
+            unfocusedLabelColor = KaloriMuted,
+            cursorColor = KaloriGreen
+        )
     )
 }
 
