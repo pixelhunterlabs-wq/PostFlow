@@ -50,9 +50,7 @@ android {
 
     buildTypes {
         getByName("release") {
-            if (releaseSigningReady) {
-                signingConfig = signingConfigs.getByName("releaseUpload")
-            }
+            if (releaseSigningReady) signingConfig = signingConfigs.getByName("releaseUpload")
         }
     }
 
@@ -82,6 +80,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
 
