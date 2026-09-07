@@ -1,0 +1,51 @@
+export const metadata = {
+  title: "Kalori Takip - Gizlilik Politikası",
+  description: "Kalori Takip uygulaması gizlilik politikası ve veri silme bilgileri.",
+};
+
+export default function CalorieTrackerPrivacyPage() {
+  return (
+    <main style={{ minHeight: "100vh", background: "#08110f", color: "#f3f7f5", padding: "48px 20px" }}>
+      <article style={{ maxWidth: 760, margin: "0 auto", lineHeight: 1.7 }}>
+        <h1 style={{ fontSize: 34, marginBottom: 8 }}>Kalori Takip Gizlilik Politikası</h1>
+        <p style={{ color: "#9da9a5" }}><strong style={{ color: "#fff" }}>Son güncelleme:</strong> 7 Eylül 2026</p>
+        <p>Kalori Takip, kullanıcıların günlük kalori ve makro besin kayıtlarını, kilo geçmişini, su tüketimini ve kişisel hedeflerini takip etmelerine yardımcı olan bir sağlık ve beslenme uygulamasıdır.</p>
+
+        <Section title="Toplanan veriler">
+          Google ile giriş yaptığınızda hesap kimliği ve e-posta adresi gibi temel hesap bilgileri alınabilir. Uygulamada oluşturduğunuz kalori kayıtları, yiyecek adı, gram, kalori, protein, karbonhidrat ve yağ değerleri; kilo kayıtları ve günlük kalori hedefleri hesabınıza bağlı olarak saklanabilir. Su takibi ve favori yiyecek tercihleri cihaz üzerinde yerel olarak tutulabilir.
+        </Section>
+        <Section title="Verilerin kullanım amacı">
+          Bu veriler yalnızca uygulamanın temel özelliklerini sağlamak, kayıtlarınızı cihazlar arasında senkronize etmek, geçmiş kalori ve kilo takibini göstermek, kişisel hedefleri hesaplamak ve hesabınızı yönetmek amacıyla kullanılır.
+        </Section>
+        <Section title="Barkod ve Open Food Facts">
+          Barkod tarama özelliği Google Code Scanner kullanabilir. Okunan ürün barkodu, ürünün besin bilgilerini bulmak amacıyla Open Food Facts hizmetine gönderilebilir.
+        </Section>
+        <Section title="Veri saklama ve güvenlik">
+          Hesaba bağlı uygulama verileri Supabase altyapısında saklanır. Kullanıcıya ait satırlar kullanıcı kimliğiyle sınırlandırılan erişim kurallarıyla korunur. Uygulama istemcisinde Supabase service-role veya benzeri yönetici anahtarları tutulmaz. Android sistem yedeği kapalıdır ve uygulama şifresiz HTTP trafiğine izin vermez.
+        </Section>
+        <Section title="Hesap ve veri silme">
+          Uygulamadaki “Hesabımı ve verilerimi sil” seçeneğiyle bu uygulamaya bağlı kalori, makro, kilo, hedef ve profil kayıtlarınızı ve Kalori Takip hesabınızı kalıcı olarak silebilirsiniz.
+        </Section>
+        <Section title="Sağlık bilgileri hakkında">
+          Kalori Takip tıbbi teşhis, tedavi veya acil sağlık hizmeti sunmaz. Kalori hedefi hesaplamaları genel tahmin niteliğindedir ve profesyonel tıbbi tavsiyenin yerine geçmez.
+        </Section>
+        <Section title="İletişim">
+          Gizlilik veya veri silme talepleri için Google Play mağaza kaydında belirtilen geliştirici iletişim adresi kullanılabilir.
+        </Section>
+
+        <footer style={{ marginTop: 48, borderTop: "1px solid #26312e", paddingTop: 20, color: "#9da9a5" }}>
+          Kalori Takip • Gizlilik Politikası
+        </footer>
+      </article>
+    </main>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section style={{ marginTop: 28 }}>
+      <h2 style={{ color: "#21f38a", fontSize: 20 }}>{title}</h2>
+      <p style={{ color: "#c8d2ce" }}>{children}</p>
+    </section>
+  );
+}
