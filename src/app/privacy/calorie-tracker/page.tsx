@@ -17,6 +17,9 @@ export default function CalorieTrackerPrivacyPage() {
         <Section title="Health Connect ve adım verisi">
           Kullanıcı açıkça izin verirse uygulama Android Health Connect üzerinden yalnızca adım sayısı verisini okuyabilir. Bu veri günlük aktivite bilgisini göstermek amacıyla kullanılır. Health Connect izni kullanıcı tarafından her zaman geri alınabilir. Adım verisi reklam hedefleme veya veri brokerı amacıyla kullanılmaz.
         </Section>
+        <Section title="Sesle yemek ekleme">
+          Kullanıcı isteğe bağlı olarak mikrofon izni verip Android konuşma tanıma arayüzünü başlatabilir. Uygulama ham ses dosyasını kendi sunucusuna yüklemez veya kalıcı olarak saklamaz. Konuşma tanıma işlemi cihazda veya cihazın seçili konuşma tanıma sağlayıcısında gerçekleştirilebilir. Tanınan metin, Türk yiyecek kataloğuyla eşleştirilerek kullanıcı onayıyla yemek kaydına dönüştürülür.
+        </Section>
         <Section title="Öğün hatırlatmaları">
           Kullanıcı isteğe bağlı olarak öğün bildirimlerini açabilir. Bildirim izni yalnızca kahvaltı, öğle ve akşam yemek kayıtlarını hatırlatmak amacıyla kullanılır. Hatırlatma tercihi cihaz üzerinde tutulur.
         </Section>
