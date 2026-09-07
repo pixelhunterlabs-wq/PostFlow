@@ -12,6 +12,17 @@
             android:targetClass="com.pixelhunter.calorietracker.VoiceLogActivity" />
     </shortcut>
     <shortcut
+        android:shortcutId="recipe_builder"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/recipe_shortcut_short"
+        android:shortcutLongLabel="@string/recipe_shortcut_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.pixelhunter.calorietracker"
+            android:targetClass="com.pixelhunter.calorietracker.RecipeBuilderActivity" />
+    </shortcut>
+    <shortcut
         android:shortcutId="wellness_hub"
         android:enabled="true"
         android:icon="@drawable/ic_launcher"
