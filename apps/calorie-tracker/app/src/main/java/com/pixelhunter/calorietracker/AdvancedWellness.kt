@@ -8,7 +8,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import androidx.core.content.edit
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -41,14 +40,19 @@ class AdvancedWellnessStore(context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun remindersEnabled(): Boolean = prefs.getBoolean("meal_reminders", false)
-    fun setRemindersEnabled(value: Boolean) = prefs.edit { putBoolean("meal_reminders", value) }
+    fun setRemindersEnabled(value: Boolean) {
+        prefs.edit().putBoolean("meal_reminders", value).apply()
+    }
 
     fun targetWeeklyLossKg(): Double = java.lang.Double.longBitsToDouble(
         prefs.getLong("weekly_loss_bits", java.lang.Double.doubleToRawLongBits(0.25))
     )
 
-    fun setTargetWeeklyLossKg(value: Double) = prefs.edit {
-        putLong("weekly_loss_bits", java.lang.Double.doubleToRawLongBits(value.coerceIn(0.0, 1.0)))
+    fun setTargetWeeklyLossKg(value: Double) {
+        prefs.edit().putLong(
+            "weekly_loss_bits",
+            java.lang.Double.doubleToRawLongBits(value.coerceIn(0.0, 1.0))
+        ).apply()
     }
 
     fun savedMeals(): List<SavedMeal> = runCatching {
@@ -57,13 +61,13 @@ class AdvancedWellnessStore(context: Context) {
 
     fun saveMeal(meal: SavedMeal): List<SavedMeal> {
         val next = savedMeals().filterNot { it.id == meal.id }.toMutableList().apply { add(0, meal) }.take(20)
-        prefs.edit { putString("saved_meals", json.encodeToString(next)) }
+        prefs.edit().putString("saved_meals", json.encodeToString(next)).apply()
         return next
     }
 
     fun deleteMeal(id: String): List<SavedMeal> {
         val next = savedMeals().filterNot { it.id == id }
-        prefs.edit { putString("saved_meals", json.encodeToString(next)) }
+        prefs.edit().putString("saved_meals", json.encodeToString(next)).apply()
         return next
     }
 }
@@ -169,7 +173,8 @@ class MealReminderReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
             .setContentIntent(contentIntent)
             .build()
-        context.getSystemService(NotificationManager::class.java).notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
+        context.getSystemService(NotificationManager::class.java)
+            .notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notification)
     }
 }
 
