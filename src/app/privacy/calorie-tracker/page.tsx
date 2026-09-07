@@ -20,6 +20,9 @@ export default function CalorieTrackerPrivacyPage() {
         <Section title="Sesle yemek ekleme">
           Kullanıcı isteğe bağlı olarak mikrofon izni verip Android konuşma tanıma arayüzünü başlatabilir. Uygulama ham ses dosyasını kendi sunucusuna yüklemez veya kalıcı olarak saklamaz. Konuşma tanıma işlemi cihazda veya cihazın seçili konuşma tanıma sağlayıcısında gerçekleştirilebilir. Tanınan metin, Türk yiyecek kataloğuyla eşleştirilerek kullanıcı onayıyla yemek kaydına dönüştürülür.
         </Section>
+        <Section title="Fotoğraftan AI yemek analizi">
+          Kullanıcı bu özelliği açıkça başlatırsa seçtiği yemek fotoğrafı, porsiyon ve yaklaşık besin değerlerini tahmin etmek amacıyla kimliği doğrulanmış Supabase Edge Function üzerinden AI analiz sağlayıcısına gönderilebilir. Uygulama fotoğrafı kendi veritabanında kalıcı olarak saklamaz. AI tarafından üretilen sonuçlar tahmindir ve kullanıcı tarafından kontrol edilmelidir.
+        </Section>
         <Section title="Öğün hatırlatmaları">
           Kullanıcı isteğe bağlı olarak öğün bildirimlerini açabilir. Bildirim izni yalnızca kahvaltı, öğle ve akşam yemek kayıtlarını hatırlatmak amacıyla kullanılır. Hatırlatma tercihi cihaz üzerinde tutulur.
         </Section>
@@ -33,13 +36,13 @@ export default function CalorieTrackerPrivacyPage() {
           Barkod tarama özelliği Google Code Scanner kullanabilir. Okunan ürün barkodu, ürünün besin bilgilerini bulmak amacıyla Open Food Facts hizmetine gönderilebilir.
         </Section>
         <Section title="Veri saklama ve güvenlik">
-          Hesaba bağlı uygulama verileri Supabase altyapısında saklanır. Kullanıcıya ait satırlar kullanıcı kimliğiyle sınırlandırılan erişim kurallarıyla korunur. Uygulama istemcisinde Supabase service-role veya benzeri yönetici anahtarları tutulmaz. Android sistem yedeği kapalıdır ve uygulama şifresiz HTTP trafiğine izin vermez.
+          Hesaba bağlı uygulama verileri Supabase altyapısında saklanır. Kullanıcıya ait satırlar kullanıcı kimliğiyle sınırlandırılan erişim kurallarıyla korunur. Uygulama istemcisinde Supabase service-role veya AI sağlayıcı API anahtarı tutulmaz. Android sistem yedeği kapalıdır ve uygulama şifresiz HTTP trafiğine izin vermez.
         </Section>
         <Section title="Hesap ve veri silme">
           Uygulamadaki “Hesabımı ve verilerimi sil” seçeneğiyle bu uygulamaya bağlı kalori, makro, kilo, hedef ve profil kayıtlarınızı ve Kalori Takip hesabınızı kalıcı olarak silebilirsiniz.
         </Section>
         <Section title="Sağlık bilgileri hakkında">
-          Kalori Takip tıbbi teşhis, tedavi veya acil sağlık hizmeti sunmaz. Kalori hedefi ve kilo trendi gibi hesaplamalar genel tahmin niteliğindedir ve profesyonel tıbbi tavsiyenin yerine geçmez.
+          Kalori Takip tıbbi teşhis, tedavi veya acil sağlık hizmeti sunmaz. Kalori hedefi, kilo trendi ve fotoğraf analizi gibi hesaplamalar genel tahmin niteliğindedir ve profesyonel tıbbi tavsiyenin yerine geçmez.
         </Section>
         <Section title="İletişim">
           Gizlilik veya veri silme talepleri için Google Play mağaza kaydında belirtilen geliştirici iletişim adresi kullanılabilir.
