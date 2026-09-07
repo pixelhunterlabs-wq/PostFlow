@@ -1,5 +1,6 @@
 package com.pixelhunter.calorietracker
 
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.util.Base64
@@ -31,6 +32,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -78,13 +80,23 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
     var selectedUri by remember { mutableStateOf<Uri?>(null) }
+    var capturedBytes by remember { mutableStateOf<ByteArray?>(null) }
     var analysis by remember { mutableStateOf<AiMealAnalysis?>(null) }
     var loading by remember { mutableStateOf(false) }
     var mealType by remember { mutableStateOf("Öğle") }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         selectedUri = uri
+        capturedBytes = null
         analysis = null
+    }
+
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+        if (bitmap != null) {
+            capturedBytes = bitmap.toJpegBytes()
+            selectedUri = null
+            analysis = null
+        }
     }
 
     Scaffold(
@@ -110,21 +122,49 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
                             Spacer(Modifier.width(10.dp))
                             Column {
                                 Text("Yemek fotoğrafını analiz et", fontWeight = FontWeight.Bold)
-                                Text("Porsiyon ve besin değerleri yaklaşık tahmindir.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+                                Text("Kamerayla çek veya galeriden seç. Porsiyon ve besin değerleri yaklaşık tahmindir.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
                             }
                         }
-                        OutlinedButton(onClick = { picker.launch("image/*") }, modifier = Modifier.fillMaxWidth()) {
-                            Icon(Icons.Filled.Image, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(if (selectedUri == null) "Fotoğraf seç" else "Fotoğrafı değiştir")
+
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { camera.launch(null) },
+                                modifier = Modifier.weight(1f),
+                                colors = ButtonDefaults.buttonColors(containerColor = KaloriGreen, contentColor = Color.Black)
+                            ) {
+                                Icon(Icons.Filled.PhotoCamera, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Kamera ile Çek", fontWeight = FontWeight.Bold)
+                            }
+                            OutlinedButton(
+                                onClick = { picker.launch("image/*") },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Filled.Image, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("Galeriden Seç")
+                            }
                         }
+
+                        if (capturedBytes != null || selectedUri != null) {
+                            Text(
+                                if (capturedBytes != null) "✓ Kamera fotoğrafı hazır" else "✓ Galeriden fotoğraf seçildi",
+                                color = KaloriGreen,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
                         Button(
-                            enabled = selectedUri != null && !loading,
+                            enabled = (capturedBytes != null || selectedUri != null) && !loading,
                             onClick = {
-                                val uri = selectedUri ?: return@Button
                                 scope.launch {
                                     loading = true
-                                    runCatching { analyzePhoto(context, uri) }
+                                    runCatching {
+                                        capturedBytes?.let { analyzePhotoBytes(it, "image/jpeg") }
+                                            ?: selectedUri?.let { analyzePhoto(context, it) }
+                                            ?: error("Önce fotoğraf çek veya seç")
+                                    }
                                         .onSuccess { analysis = it }
                                         .onFailure { snackbar.showSnackbar(it.message ?: "Fotoğraf analiz edilemedi") }
                                     loading = false
@@ -136,7 +176,10 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
                             if (loading) {
                                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.Black)
                                 Spacer(Modifier.width(8.dp))
-                            } else Icon(Icons.Filled.AutoAwesome, null)
+                            } else {
+                                Icon(Icons.Filled.AutoAwesome, null)
+                                Spacer(Modifier.width(8.dp))
+                            }
                             Text(if (loading) "Analiz ediliyor" else "AI ile analiz et")
                         }
                     }
@@ -155,9 +198,7 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
                     }
                 }
 
-                item {
-                    Text("Tespit edilen yiyecekler", fontWeight = FontWeight.Bold)
-                }
+                item { Text("Tespit edilen yiyecekler", fontWeight = FontWeight.Bold) }
                 items(result.items) { item ->
                     Card(colors = CardDefaults.cardColors(containerColor = KaloriSurfaceAlt)) {
                         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -202,12 +243,22 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
     }
 }
 
+private fun Bitmap.toJpegBytes(): ByteArray {
+    val output = ByteArrayOutputStream()
+    compress(Bitmap.CompressFormat.JPEG, 88, output)
+    return output.toByteArray()
+}
+
 private suspend fun analyzePhoto(context: android.content.Context, uri: Uri): AiMealAnalysis = withContext(Dispatchers.IO) {
+    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Fotoğraf okunamadı")
+    val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+    analyzePhotoBytes(bytes, mimeType)
+}
+
+private suspend fun analyzePhotoBytes(bytes: ByteArray, mimeType: String): AiMealAnalysis = withContext(Dispatchers.IO) {
     val client = SupabaseProvider.client ?: error("Supabase bağlantısı yok")
     val token = client.auth.currentSessionOrNull()?.accessToken ?: error("Önce giriş yapmalısın")
-    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Fotoğraf okunamadı")
     if (bytes.size > 5_500_000) error("Fotoğraf çok büyük. Daha küçük bir fotoğraf seç.")
-    val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
     val body = Json.encodeToString(AiPhotoRequest(Base64.encodeToString(bytes, Base64.NO_WRAP), mimeType))
 
     val connection = (URL("${BuildConfig.SUPABASE_URL}/functions/v1/analyze-food-photo").openConnection() as HttpURLConnection).apply {
