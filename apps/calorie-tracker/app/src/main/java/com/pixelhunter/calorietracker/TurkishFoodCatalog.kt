@@ -54,8 +54,8 @@ class LocalWellnessStore(context: Context) {
     private val prefs = context.getSharedPreferences("calorie_wellness", Context.MODE_PRIVATE)
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun onboardingDone(): Boolean = prefs.getBoolean("onboarding_done", false)
-    fun markOnboardingDone() = prefs.edit().putBoolean("onboarding_done", true).apply()
+    fun onboardingDone(userKey: String): Boolean = prefs.getBoolean("onboarding_done_${userKey.lowercase()}", false)
+    fun markOnboardingDone(userKey: String) = prefs.edit().putBoolean("onboarding_done_${userKey.lowercase()}", true).commit()
 
     fun waterMl(date: LocalDate = LocalDate.now()): Int = prefs.getInt("water_$date", 0)
     fun addWater(amount: Int, date: LocalDate = LocalDate.now()): Int {
