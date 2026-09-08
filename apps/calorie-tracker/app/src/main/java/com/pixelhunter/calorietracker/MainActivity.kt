@@ -417,6 +417,27 @@ class TrackerViewModel : ViewModel() {
         }.onFailure { uiState = uiState.copy(message = "Kayıtlı öğünler güncellenemedi. Lütfen tekrar deneyin.") } }
     }
 
+    fun deleteSavedMeal(id: String) {
+        val client = supabase ?: return
+        viewModelScope.launch { runCatching {
+            val user = client.auth.currentUserOrNull() ?: error("Oturum bulunamadı")
+            client.from("calorie_saved_meals").delete { filter { eq("id", id); eq("user_id", user.id) } }
+            loadAccountData(user.id)
+        }.onFailure { uiState = uiState.copy(message = "Kayıtlı öğün güncellenemedi. Lütfen tekrar deneyin.") } }
+    }
+
+    fun addSavedMealToDiary(id: String, mealType: String) {
+        val client = supabase ?: return
+        viewModelScope.launch { runCatching {
+            val user = client.auth.currentUserOrNull() ?: error("Oturum bulunamadı")
+            val items = client.from("calorie_saved_meal_items").select { filter { eq("saved_meal_id", id); eq("user_id", user.id) } }.decodeList<SavedMealItemRemote>()
+            if (items.isEmpty()) error("empty_saved_meal")
+            items.forEach { item -> client.from("calorie_food_entries").insert(CalorieEntry(userId = user.id, foodName = item.foodName, grams = item.grams, calories = item.calories, proteinG = item.proteinG, carbsG = item.carbsG, fatG = item.fatG, mealType = mealType, source = "saved_food")) }
+            loadAll()
+            uiState = uiState.copy(message = "Öğün günlüğe eklendi.")
+        }.onFailure { uiState = uiState.copy(message = "Kayıtlı öğün güncellenemedi. Lütfen tekrar deneyin.") } }
+    }
+
     fun completeOnboarding(calories: Int, weight: Double) {
         val client = supabase ?: return
         viewModelScope.launch {

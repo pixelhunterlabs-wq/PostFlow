@@ -52,8 +52,6 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
     var healthGranted by remember { mutableStateOf(false) }
     var reminders by remember { mutableStateOf(store.remindersEnabled()) }
     var weeklyTarget by remember { mutableDoubleStateOf(store.targetWeeklyLossKg()) }
-    var savedMeals by remember { mutableStateOf(store.savedMeals()) }
-    var showMealDialog by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
     val healthPermissionLauncher = rememberLauncherForActivityResult(
@@ -230,7 +228,7 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
                         Text("Kayıtlı öğünler", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text("Sık yediğin öğünleri tek dokunuşla günlüğe ekle", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
                     }
-                    FilledTonalButton(onClick = { showMealDialog = true }) {
+                    FilledTonalButton(onClick = { context.startActivity(Intent(context, RecipeBuilderActivity::class.java)) }) {
                         Icon(Icons.Filled.Add, null)
                         Spacer(Modifier.width(4.dp))
                         Text("Kaydet")
@@ -238,17 +236,17 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
                 }
             }
 
-            if (savedMeals.isEmpty()) {
+            if (state.savedMeals.isEmpty()) {
                 item { HubCard { Text("Henüz kayıtlı öğün yok.", color = KaloriMuted) } }
             } else {
-                items(savedMeals, key = { it.id }) { meal ->
+                items(state.savedMeals, key = { it.id }) { meal ->
                     HubCard {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(meal.name, fontWeight = FontWeight.Bold)
                                 Text("${meal.calories.toInt()} kcal • P ${meal.proteinG.toInt()} • K ${meal.carbsG.toInt()} • Y ${meal.fatG.toInt()}", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
                             }
-                            IconButton(onClick = { savedMeals = store.deleteMeal(meal.id) }) {
+                            IconButton(onClick = { vm.deleteSavedMeal(meal.id) }) {
                                 Icon(Icons.Filled.DeleteOutline, "Sil", tint = KaloriDanger)
                             }
                         }
@@ -256,8 +254,7 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
                             listOf("Kahvaltı", "Öğle", "Akşam", "Atıştırmalık").forEach { mealType ->
                                 AssistChip(
                                     onClick = {
-                                        vm.addFood(meal.name, mealType, meal.grams, meal.calories, meal.proteinG, meal.carbsG, meal.fatG, "saved_meal")
-                                        message = "$mealType öğününe eklendi"
+                                        vm.addSavedMealToDiary(meal.id, mealType)
                                     },
                                     label = { Text(mealType) }
                                 )
@@ -280,16 +277,6 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
         }
     }
 
-    if (showMealDialog) {
-        SavedMealDialog(
-            onDismiss = { showMealDialog = false },
-            onSave = { meal ->
-                savedMeals = store.saveMeal(meal)
-                showMealDialog = false
-                message = "Öğün kaydedildi"
-            }
-        )
-    }
 }
 
 @Composable
