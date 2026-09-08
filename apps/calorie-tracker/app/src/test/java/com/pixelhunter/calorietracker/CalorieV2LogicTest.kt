@@ -10,4 +10,6 @@ class CalorieV2LogicTest {
     @Test fun calculatesTdee() { assertEquals(2759.0, GoalCalculator.tdee(input), 0.2) }
     @Test fun appliesSafeMacros() { val g = GoalCalculator.goals(input); assertTrue(g.calories >= 1500 && g.proteinG >= 50 && g.fatG >= 40) }
     @Test fun localRecommendationsAreAvailableWithoutAiKey() { assertTrue(LocalMealRecommendationProvider().recommend(500, 40).size >= 3) }
+    @Test fun waterAndWeeklyTotalsAreCalculated() { assertEquals(750, weeklyNutrition(emptyList(), listOf(250, 500)).waterMl) }
+    @Test fun savedMealTotalsAreSummed() { assertEquals(300.0, savedMealTotals(listOf(SavedMeal("a","x",300.0,1.0,2.0,3.0,100.0))).calories, 0.01) }
 }

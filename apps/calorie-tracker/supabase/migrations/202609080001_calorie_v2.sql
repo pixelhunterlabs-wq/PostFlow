@@ -21,7 +21,22 @@ create table if not exists public.calorie_water_entries (
   id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade,
   amount_ml integer not null check(amount_ml > 0), logged_at timestamptz not null default now(), created_at timestamptz not null default now()
 );
+create table if not exists public.calorie_saved_meals (
+  id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null, total_grams numeric not null default 0, calories numeric not null default 0,
+  protein_g numeric not null default 0, carbs_g numeric not null default 0, fat_g numeric not null default 0,
+  is_favorite boolean not null default false, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+);
+create table if not exists public.calorie_saved_meal_items (
+  id uuid primary key default gen_random_uuid(), saved_meal_id uuid not null references public.calorie_saved_meals(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade, food_name text not null, grams numeric not null,
+  calories numeric not null default 0, protein_g numeric not null default 0, carbs_g numeric not null default 0, fat_g numeric not null default 0
+);
 alter table public.calorie_favorite_foods enable row level security;
 alter table public.calorie_water_entries enable row level security;
+alter table public.calorie_saved_meals enable row level security;
+alter table public.calorie_saved_meal_items enable row level security;
 create policy "favorite owner access" on public.calorie_favorite_foods for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 create policy "water owner access" on public.calorie_water_entries for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy "saved meal owner access" on public.calorie_saved_meals for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+create policy "saved meal item owner access" on public.calorie_saved_meal_items for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);

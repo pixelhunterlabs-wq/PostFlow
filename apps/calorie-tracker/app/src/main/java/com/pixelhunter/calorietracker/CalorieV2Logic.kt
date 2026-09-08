@@ -25,3 +25,7 @@ class LocalMealRecommendationProvider : MealRecommendationProvider {
     ).filterIndexed { index, _ -> remainingCalories >= listOf(470, 390, 420)[index] || index == 0 }.take(3)
 }
 class AiMealRecommendationProvider : MealRecommendationProvider { override fun recommend(remainingCalories: Int, remainingProtein: Int) = emptyList<String>() }
+
+data class WeeklyNutrition(val calories: Double, val protein: Double, val carbs: Double, val fat: Double, val waterMl: Int)
+fun weeklyNutrition(entries: List<CalorieEntry>, waterAmounts: List<Int>): WeeklyNutrition = WeeklyNutrition(entries.sumOf { it.calories } / 7, entries.sumOf { it.proteinG } / 7, entries.sumOf { it.carbsG } / 7, entries.sumOf { it.fatG } / 7, waterAmounts.sum())
+fun savedMealTotals(items: List<SavedMeal>): SavedMeal = SavedMeal("total", "Toplam", items.sumOf { it.calories }, items.sumOf { it.proteinG }, items.sumOf { it.carbsG }, items.sumOf { it.fatG }, items.sumOf { it.grams })
