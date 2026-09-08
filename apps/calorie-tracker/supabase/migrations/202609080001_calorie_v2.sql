@@ -17,6 +17,7 @@ create table if not exists public.calorie_favorite_foods (
   meal_type text not null default 'Öğün', usage_count integer not null default 0, last_used_at timestamptz, created_at timestamptz not null default now(),
   unique(user_id, food_name)
 );
+alter table public.calorie_favorite_foods add column if not exists source text not null default 'favorite';
 create table if not exists public.calorie_water_entries (
   id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade,
   amount_ml integer not null check(amount_ml > 0), logged_at timestamptz not null default now(), created_at timestamptz not null default now()
