@@ -52,6 +52,7 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
     var healthGranted by remember { mutableStateOf(false) }
     var reminders by remember { mutableStateOf(store.remindersEnabled()) }
     var weeklyTarget by remember { mutableDoubleStateOf(store.targetWeeklyLossKg()) }
+    var editingSavedMeal by remember { mutableStateOf<SavedMealRemote?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
 
     val healthPermissionLauncher = rememberLauncherForActivityResult(
@@ -246,6 +247,9 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
                                 Text(meal.name, fontWeight = FontWeight.Bold)
                                 Text("${meal.calories.toInt()} kcal • P ${meal.proteinG.toInt()} • K ${meal.carbsG.toInt()} • Y ${meal.fatG.toInt()}", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
                             }
+                            IconButton(onClick = { editingSavedMeal = meal; vm.loadSavedMealItems(meal.id) }) {
+                                Icon(Icons.Filled.Edit, "Düzenle", tint = KaloriGreen)
+                            }
                             IconButton(onClick = { vm.deleteSavedMeal(meal.id) }) {
                                 Icon(Icons.Filled.DeleteOutline, "Sil", tint = KaloriDanger)
                             }
@@ -306,6 +310,44 @@ private fun ToolCard(
             Icon(Icons.Filled.ChevronRight, null, tint = KaloriMuted)
         }
     }
+
+    editingSavedMeal?.let { meal ->
+        SavedMealEditDialog(
+            meal = meal,
+            initialItems = state.editingSavedMealItems,
+            onDismiss = { editingSavedMeal = null },
+            onSave = { name, items -> vm.updateSavedMeal(meal, name, items); editingSavedMeal = null }
+        )
+    }
+}
+
+@Composable
+private fun SavedMealEditDialog(meal: SavedMealRemote, initialItems: List<SavedMealItemRemote>, onDismiss: () -> Unit, onSave: (String, List<SavedMealItemRemote>) -> Unit) {
+    var name by remember(meal.id) { mutableStateOf(meal.name) }
+    var items by remember(meal.id, initialItems) { mutableStateOf(initialItems) }
+    AlertDialog(
+        onDismissRequest = onDismiss, containerColor = KaloriDialog, titleContentColor = KaloriText, textContentColor = KaloriMuted,
+        title = { Text("Kayıtlı öğünü düzenle", fontWeight = FontWeight.Bold) },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { OutlinedTextField(name, { name = it }, label = { Text("Öğün adı") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                items(items, key = { it.foodName + it.grams }) { item ->
+                    Column {
+                        OutlinedTextField(item.foodName, { value -> items = items.map { if (it === item) it.copy(foodName = value) else it } }, label = { Text("Yemek adı") }, modifier = Modifier.fillMaxWidth())
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("g" to item.grams, "kcal" to item.calories, "P" to item.proteinG, "K" to item.carbsG, "Y" to item.fatG).forEach { (label, value) ->
+                                OutlinedTextField(value.toString(), { input -> input.toDoubleOrNull()?.let { n -> items = items.map { current -> if (current === item) when (label) { "g" -> current.copy(grams=n); "kcal" -> current.copy(calories=n); "P" -> current.copy(proteinG=n); "K" -> current.copy(carbsG=n); else -> current.copy(fatG=n) } else current } } }, label = { Text(label) }, modifier = Modifier.weight(1f), singleLine = true)
+                            }
+                        }
+                        TextButton(onClick = { items = items.filterNot { it === item } }) { Text("Item sil", color = KaloriDanger) }
+                    }
+                }
+                item { TextButton(onClick = { items = items + SavedMealItemRemote(meal.id, meal.userId, "Yeni yiyecek", 100.0, 0.0, 0.0, 0.0, 0.0) }) { Text("+ Item ekle", color = KaloriGreen) } }
+            }
+        },
+        confirmButton = { Button(enabled = name.isNotBlank() && items.isNotEmpty() && items.all(::isValidSavedMealItem), onClick = { onSave(name, items) }, colors = ButtonDefaults.buttonColors(containerColor = KaloriGreen, contentColor = Color.Black)) { Text("Kaydet") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç", color = KaloriMuted) } }
+    )
 }
 
 @Composable

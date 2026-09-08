@@ -149,6 +149,7 @@ data class TrackerUiState(
     val waterMl: Int = 0,
     val favorites: List<FavoriteFood> = emptyList(),
     val savedMeals: List<SavedMealRemote> = emptyList(),
+    val editingSavedMealItems: List<SavedMealItemRemote> = emptyList(),
     val barcodeLoading: Boolean = false,
     val barcodeProduct: BarcodeProduct? = null,
     val onboardingCompleted: Boolean = false,
@@ -422,6 +423,28 @@ class TrackerViewModel : ViewModel() {
         viewModelScope.launch { runCatching {
             val user = client.auth.currentUserOrNull() ?: error("Oturum bulunamadı")
             client.from("calorie_saved_meals").delete { filter { eq("id", id); eq("user_id", user.id) } }
+            loadAccountData(user.id)
+        }.onFailure { uiState = uiState.copy(message = "Kayıtlı öğün güncellenemedi. Lütfen tekrar deneyin.") } }
+    }
+
+    fun loadSavedMealItems(id: String) {
+        val client = supabase ?: return
+        viewModelScope.launch { runCatching {
+            val user = client.auth.currentUserOrNull() ?: error("Oturum bulunamadı")
+            val items = client.from("calorie_saved_meal_items").select { filter { eq("saved_meal_id", id); eq("user_id", user.id) } }.decodeList<SavedMealItemRemote>()
+            uiState = uiState.copy(editingSavedMealItems = items)
+        }.onFailure { uiState = uiState.copy(message = "Kayıtlı öğün güncellenemedi. Lütfen tekrar deneyin.") } }
+    }
+
+    fun updateSavedMeal(meal: SavedMealRemote, name: String, items: List<SavedMealItemRemote>) {
+        val client = supabase ?: return
+        if (name.isBlank() || items.isEmpty() || items.any { !isValidSavedMealItem(it) }) { uiState = uiState.copy(message = "Kayıtlı öğün güncellenemedi. Lütfen tekrar deneyin."); return }
+        viewModelScope.launch { runCatching {
+            val user = client.auth.currentUserOrNull() ?: error("Oturum bulunamadı")
+            val total = savedMealTotals(items)
+            client.from("calorie_saved_meals").update({ set("name", name.trim()); set("total_grams", total.grams); set("calories", total.calories); set("protein_g", total.protein); set("carbs_g", total.carbs); set("fat_g", total.fat) }) { filter { eq("id", meal.id); eq("user_id", user.id) } }
+            client.from("calorie_saved_meal_items").delete { filter { eq("saved_meal_id", meal.id); eq("user_id", user.id) } }
+            client.from("calorie_saved_meal_items").insert(items.map { it.copy(savedMealId = meal.id, userId = user.id) })
             loadAccountData(user.id)
         }.onFailure { uiState = uiState.copy(message = "Kayıtlı öğün güncellenemedi. Lütfen tekrar deneyin.") } }
     }
