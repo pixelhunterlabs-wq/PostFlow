@@ -320,7 +320,7 @@ class TrackerViewModel : ViewModel() {
                     set("food_name", name.trim()); set("meal_type", meal.trim().ifBlank { "Öğün" }); set("grams", grams); set("calories", calories); set("protein_g", protein); set("carbs_g", carbs); set("fat_g", fat)
                 }) { filter { eq("id", entry.id) } }
                 loadAll(); uiState = uiState.copy(message = "Yemek kaydı güncellendi")
-            }.onFailure { uiState = uiState.copy(message = it.message ?: "Yemek güncellenemedi") }
+            }.onFailure { uiState = uiState.copy(message = "Öğün güncellenemedi. Lütfen tekrar deneyin.") }
         }
     }
 

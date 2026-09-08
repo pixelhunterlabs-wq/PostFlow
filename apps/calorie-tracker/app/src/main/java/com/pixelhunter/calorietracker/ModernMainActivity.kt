@@ -77,6 +77,7 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
     var showGoalDialog by remember { mutableStateOf(false) }
     var showManualBarcode by remember { mutableStateOf(false) }
     var pendingMealDelete by remember { mutableStateOf<CalorieEntry?>(null) }
+    var mealActionEntry by remember { mutableStateOf<CalorieEntry?>(null) }
     var editingDiaryEntry by remember { mutableStateOf<CalorieEntry?>(null) }
     var showDeleteAccount by remember { mutableStateOf(false) }
     var waterMl by remember { mutableIntStateOf(store.waterMl()) }
@@ -205,7 +206,7 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
                     onVoice = ::openVoice,
                     onGoal = { showGoalDialog = true }
                 )
-                MainTab.DIARY -> DiaryScreen(state, onFood = { showFoodSearch = true }, onRepeat = vm::addRecentFood, onEditEntry = { editingDiaryEntry = it }, onLongPressEntry = { pendingMealDelete = it })
+                MainTab.DIARY -> DiaryScreen(state, onFood = { showFoodSearch = true }, onRepeat = vm::addRecentFood, onLongPressEntry = { mealActionEntry = it })
                 MainTab.PROGRESS -> ProgressScreen(state, onWeight = { showWeightDialog = true })
                 MainTab.PROFILE -> ProfileScreen(
                     state = state,
@@ -264,6 +265,15 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
     if (showManualBarcode) BarcodeInputDialog({ showManualBarcode = false }) {
         vm.lookupBarcode(it)
         showManualBarcode = false
+    }
+    mealActionEntry?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { mealActionEntry = null }, containerColor = KaloriDialog, titleContentColor = KaloriText, textContentColor = KaloriMuted,
+            title = { Text("Öğün işlemleri", fontWeight = FontWeight.Bold) },
+            text = { Text(entry.foodName, color = KaloriText, fontWeight = FontWeight.SemiBold) },
+            confirmButton = { Button(onClick = { editingDiaryEntry = entry; mealActionEntry = null }, colors = ButtonDefaults.buttonColors(containerColor = KaloriGreen, contentColor = Color.Black)) { Text("Düzenle") } },
+            dismissButton = { Row { TextButton(onClick = { pendingMealDelete = entry; mealActionEntry = null }) { Text("Sil", color = KaloriDanger) }; TextButton(onClick = { mealActionEntry = null }) { Text("Vazgeç", color = KaloriMuted) } } }
+        )
     }
     pendingMealDelete?.let { entry ->
         AlertDialog(
@@ -514,7 +524,7 @@ private fun QuickActionCard(label: String, icon: androidx.compose.ui.graphics.ve
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun DiaryScreen(state: TrackerUiState, onFood: () -> Unit, onRepeat: (CalorieEntry) -> Unit, onEditEntry: (CalorieEntry) -> Unit, onLongPressEntry: (CalorieEntry) -> Unit) {
+private fun DiaryScreen(state: TrackerUiState, onFood: () -> Unit, onRepeat: (CalorieEntry) -> Unit, onLongPressEntry: (CalorieEntry) -> Unit) {
     val meals = listOf("Kahvaltı", "Öğle", "Akşam", "Atıştırmalık", "Öğün")
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     val selectedEntries = state.entries.filter { it.dateText() == selectedDate.toString() }
@@ -543,7 +553,7 @@ private fun DiaryScreen(state: TrackerUiState, onFood: () -> Unit, onRepeat: (Ca
                         if (entries.isEmpty()) Text("Henüz kayıt yok", color = KaloriMuted)
                         entries.forEach { entry ->
                             val haptics = LocalHapticFeedback.current
-                            Row(Modifier.fillMaxWidth().combinedClickable(onClick = { onEditEntry(entry) }, onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onLongPressEntry(entry) }).padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.fillMaxWidth().combinedClickable(onClick = {}, onLongClick = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); onLongPressEntry(entry) }).padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
                                     Text(entry.foodName, fontWeight = FontWeight.SemiBold)
                                     Text("${entry.grams.toInt()} g • P ${entry.proteinG.toInt()} • K ${entry.carbsG.toInt()} • Y ${entry.fatG.toInt()}", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
@@ -888,7 +898,7 @@ private fun MacroCard(title: String, value: Int, goal: Int, color: Color, modifi
 @Composable
 private fun EditDiaryEntryDialog(entry: CalorieEntry, onDismiss: () -> Unit, onSave: (String, String, Double, Double, Double, Double, Double) -> Unit) {
     var name by remember(entry.id) { mutableStateOf(entry.foodName) }
-    var meal by remember(entry.id) { mutableStateOf(entry.mealType) }
+    var meal by remember(entry.id) { mutableStateOf(normalizeMeal(entry.mealType).takeIf { it in listOf("Kahvaltı", "Öğle", "Akşam", "Atıştırmalık") } ?: "Öğle") }
     var grams by remember(entry.id) { mutableStateOf(entry.grams.toString()) }
     var calories by remember(entry.id) { mutableStateOf(entry.calories.toString()) }
     var protein by remember(entry.id) { mutableStateOf(entry.proteinG.toString()) }
@@ -900,14 +910,14 @@ private fun EditDiaryEntryDialog(entry: CalorieEntry, onDismiss: () -> Unit, onS
         title = { Text("Öğünü düzenle", fontWeight = FontWeight.Bold) },
         text = { LazyColumn(Modifier.heightIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item { OutlinedTextField(name, { name = it }, label = { Text("Yemek") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
-            item { OutlinedTextField(meal, { meal = it }, label = { Text("Öğün") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+            item { MealSelector(meal) { meal = it } }
             item { NumberField("Gram", grams) { grams = it } }
             item { NumberField("Kalori", calories) { calories = it } }
             item { NumberField("Protein g", protein) { protein = it } }
             item { NumberField("Karbonhidrat g", carbs) { carbs = it } }
             item { NumberField("Yağ g", fat) { fat = it } }
         } },
-        confirmButton = { Button(enabled = valid, onClick = { onSave(name, meal, grams.toDoubleOrNull() ?: 0.0, calories.toDoubleOrNull() ?: 0.0, protein.toDoubleOrNull() ?: 0.0, carbs.toDoubleOrNull() ?: 0.0, fat.toDoubleOrNull() ?: 0.0) }) { Text("Kaydet") } },
+        confirmButton = { Button(enabled = valid, onClick = { onSave(name, meal, grams.toDoubleOrNull() ?: 0.0, calories.toDoubleOrNull() ?: 0.0, protein.toDoubleOrNull() ?: 0.0, carbs.toDoubleOrNull() ?: 0.0, fat.toDoubleOrNull() ?: 0.0) }) { Text("Güncelle") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç", color = KaloriGreen) } }
     )
 }
