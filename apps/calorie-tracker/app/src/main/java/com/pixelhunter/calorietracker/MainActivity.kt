@@ -363,8 +363,17 @@ class TrackerViewModel : ViewModel() {
     fun deleteWeight(entryId: String) {
         val client = supabase ?: return
         viewModelScope.launch {
-            runCatching { client.from("calorie_weight_entries").delete { filter { eq("id", entryId) } }; loadAll(); uiState = uiState.copy(message = "Kilo kaydı silindi") }
-                .onFailure { uiState = uiState.copy(message = it.message ?: "Kilo kaydı silinemedi") }
+            runCatching {
+                val user = client.auth.currentUserOrNull() ?: error("Oturum bulunamadı")
+                client.from("calorie_weight_entries").delete {
+                    filter { eq("id", entryId); eq("user_id", user.id) }
+                }
+                loadAll()
+                if (uiState.weights.any { it.id == entryId }) error("delete_not_confirmed")
+                uiState = uiState.copy(message = "Kilo kaydı silindi")
+            }.onFailure {
+                uiState = uiState.copy(message = "Kilo kaydı silinemedi. Lütfen tekrar deneyin.")
+            }
         }
     }
 

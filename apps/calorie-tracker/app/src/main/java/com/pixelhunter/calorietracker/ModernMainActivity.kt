@@ -77,6 +77,7 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
     var showGoalDialog by remember { mutableStateOf(false) }
     var showManualBarcode by remember { mutableStateOf(false) }
     var pendingMealDelete by remember { mutableStateOf<CalorieEntry?>(null) }
+    var pendingWeightDelete by remember { mutableStateOf<WeightEntry?>(null) }
     var mealActionEntry by remember { mutableStateOf<CalorieEntry?>(null) }
     var editingDiaryEntry by remember { mutableStateOf<CalorieEntry?>(null) }
     var showDeleteAccount by remember { mutableStateOf(false) }
@@ -207,7 +208,11 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
                     onGoal = { showGoalDialog = true }
                 )
                 MainTab.DIARY -> DiaryScreen(state, onFood = { showFoodSearch = true }, onRepeat = vm::addRecentFood, onLongPressEntry = { mealActionEntry = it })
-                MainTab.PROGRESS -> ProgressScreen(state, onWeight = { showWeightDialog = true })
+                MainTab.PROGRESS -> ProgressScreen(
+                    state,
+                    onWeight = { showWeightDialog = true },
+                    onDeleteWeight = { pendingWeightDelete = it }
+                )
                 MainTab.PROFILE -> ProfileScreen(
                     state = state,
                     onGoal = { showGoalDialog = true },
@@ -285,6 +290,25 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
             text = { Text("${entry.foodName} kaydını silmek istiyor musun?") },
             confirmButton = { Button(onClick = { vm.deleteFood(entry.id); pendingMealDelete = null }, colors = ButtonDefaults.buttonColors(containerColor = KaloriDanger, contentColor = Color.White)) { Text("Sil") } },
             dismissButton = { TextButton(onClick = { pendingMealDelete = null }) { Text("Vazgeç", color = KaloriGreen) } }
+        )
+    }
+    pendingWeightDelete?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { pendingWeightDelete = null },
+            containerColor = KaloriDialog,
+            titleContentColor = KaloriText,
+            textContentColor = KaloriMuted,
+            title = { Text("Kilo kaydını sil", fontWeight = FontWeight.Bold) },
+            text = { Text("${entry.weightKg} kg kaydını silmek istiyor musun?") },
+            confirmButton = {
+                Button(
+                    onClick = { vm.deleteWeight(entry.id); pendingWeightDelete = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = KaloriDanger, contentColor = Color.White)
+                ) { Text("Sil") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingWeightDelete = null }) { Text("Vazgeç", color = KaloriGreen) }
+            }
         )
     }
     editingDiaryEntry?.let { entry ->
@@ -580,8 +604,14 @@ private fun DiaryScreen(state: TrackerUiState, onFood: () -> Unit, onRepeat: (Ca
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ProgressScreen(state: TrackerUiState, onWeight: () -> Unit) {
+private fun ProgressScreen(
+    state: TrackerUiState,
+    onWeight: () -> Unit,
+    onDeleteWeight: (WeightEntry) -> Unit
+) {
+    val haptics = LocalHapticFeedback.current
     val days = state.dailyTotals(7)
     val max = maxOf(state.calorieGoal.toDouble(), days.maxOfOrNull { it.calories } ?: 1.0)
     val adherence = days.count { it.calories > 0 && abs(it.calories - state.calorieGoal) <= state.calorieGoal * 0.10 }
@@ -635,7 +665,16 @@ private fun ProgressScreen(state: TrackerUiState, onWeight: () -> Unit) {
         }
         if (state.weights.isEmpty()) item { Text("Henüz kilo kaydı yok.", color = KaloriMuted) }
         else items(state.weights.take(12), key = { "progress-weight-${it.id}" }) { weight ->
-            Card(colors = CardDefaults.cardColors(containerColor = KaloriSurface)) {
+            Card(
+                modifier = Modifier.combinedClickable(
+                    onClick = {},
+                    onLongClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onDeleteWeight(weight)
+                    }
+                ),
+                colors = CardDefaults.cardColors(containerColor = KaloriSurface)
+            ) {
                 Row(Modifier.fillMaxWidth().padding(14.dp)) {
                     Text(weight.dateText(), Modifier.weight(1f), color = KaloriMuted)
                     Text("${weight.weightKg} kg", fontWeight = FontWeight.Bold)

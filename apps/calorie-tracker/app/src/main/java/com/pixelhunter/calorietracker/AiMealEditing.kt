@@ -6,6 +6,9 @@ fun scaleAiMeal(meal: EditableAiMeal, grams: Double): AiMealItem {
     val r = grams / meal.baseGrams.coerceAtLeast(0.01)
     return meal.item.copy(grams = grams, calories = meal.baseCalories * r, proteinG = meal.baseProtein * r, carbsG = meal.baseCarbs * r, fatG = meal.baseFat * r)
 }
+fun isValidAiMeal(item: AiMealItem): Boolean = item.grams > 0 && item.calories >= 0 &&
+    item.proteinG >= 0 && item.carbsG >= 0 && item.fatG >= 0
+fun selectedAiMeals(meals: List<EditableAiMeal>): List<AiMealItem> = meals.filter { it.included }.map { it.item }
 fun aiPhotoError(code: Int, body: String = ""): String = when {
     code == 401 -> "Oturumunun süresi doldu. Lütfen tekrar giriş yap."
     code == 413 -> "Fotoğraf çok büyük. Daha küçük bir fotoğraf seç."

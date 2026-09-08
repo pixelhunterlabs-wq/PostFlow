@@ -86,6 +86,8 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
     var selectedUri by remember { mutableStateOf<Uri?>(null) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     var analysis by remember { mutableStateOf<AiMealAnalysis?>(null) }
+    var editableItems by remember { mutableStateOf<List<EditableAiMeal>>(emptyList()) }
+    var submitting by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var mealType by remember { mutableStateOf("Öğle") }
     val previewBitmap = selectedUri?.let { uri ->
@@ -189,7 +191,7 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
                                         selectedUri?.let { analyzePhoto(context, it) }
                                             ?: error("Önce fotoğraf çek veya seç")
                                     }
-                                        .onSuccess { analysis = it }
+                                        .onSuccess { result -> analysis = result; editableItems = result.items.map(::EditableAiMeal) }
                                         .onFailure { snackbar.showSnackbar(it.message ?: "Fotoğraf analiz edilemedi") }
                                     loading = false
                                 }
@@ -211,29 +213,22 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
             }
 
             analysis?.let { result ->
+                val selectedItems = selectedAiMeals(editableItems)
+                val totalCalories = selectedItems.sumOf { it.calories }
                 item {
                     Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF0E2A1D)), shape = RoundedCornerShape(18.dp)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("Tahmini toplam", color = KaloriMuted)
-                            Text("${result.total.calories.toInt()} kcal", style = MaterialTheme.typography.headlineMedium, color = KaloriGreen, fontWeight = FontWeight.Black)
-                            Text("${result.total.grams.toInt()} g • P ${result.total.proteinG.toInt()} • K ${result.total.carbsG.toInt()} • Y ${result.total.fatG.toInt()}")
+                            Text("${totalCalories.toInt()} kcal", style = MaterialTheme.typography.headlineMedium, color = KaloriGreen, fontWeight = FontWeight.Black)
+                            Text("${selectedItems.sumOf { it.grams }.toInt()} g • P ${selectedItems.sumOf { it.proteinG }.toInt()} • K ${selectedItems.sumOf { it.carbsG }.toInt()} • Y ${selectedItems.sumOf { it.fatG }.toInt()}")
                             if (result.note.isNotBlank()) Text(result.note, color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
 
                 item { Text("Tespit edilen yiyecekler", fontWeight = FontWeight.Bold) }
-                items(result.items) { item ->
-                    Card(colors = CardDefaults.cardColors(containerColor = KaloriSurfaceAlt)) {
-                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(item.name, fontWeight = FontWeight.Bold)
-                                Text("${item.calories.toInt()} kcal", color = KaloriGreen)
-                            }
-                            Text("${item.grams.toInt()} g • P ${item.proteinG.toInt()} • K ${item.carbsG.toInt()} • Y ${item.fatG.toInt()}", color = KaloriMuted)
-                            Text("Güven ${(item.confidence * 100).toInt()}%", color = KaloriMuted, style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
+                items(editableItems, key = { it.item.name + it.item.confidence }) { editable ->
+                    AiMealEditor(editable, onChange = { changed -> editableItems = editableItems.map { if (it === editable) changed else it } }, onRemove = { editableItems = editableItems.filterNot { it === editable } })
                 }
 
                 item {
@@ -247,12 +242,13 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
 
                 item {
                     Button(
-                        enabled = result.items.isNotEmpty(),
+                        enabled = selectedItems.isNotEmpty() && selectedItems.all(::isValidAiMeal) && !submitting,
                         onClick = {
-                            result.items.forEach { food ->
+                            submitting = true
+                            selectedItems.forEach { food ->
                                 vm.addFood(food.name, mealType, food.grams, food.calories, food.proteinG, food.carbsG, food.fatG, "ai_photo")
                             }
-                            scope.launch { snackbar.showSnackbar("${result.items.size} yiyecek $mealType öğününe eklendi") }
+                            scope.launch { snackbar.showSnackbar("${selectedItems.size} yiyecek $mealType öğününe eklendi"); submitting = false }
                         },
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = KaloriGreen, contentColor = Color.Black)
@@ -262,6 +258,33 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
                         Text("Tümünü günlüğe ekle", fontWeight = FontWeight.Bold)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AiMealEditor(meal: EditableAiMeal, onChange: (EditableAiMeal) -> Unit, onRemove: () -> Unit) {
+    val item = meal.item
+    @Composable fun number(label: String, value: Double, apply: (Double) -> EditableAiMeal) {
+        OutlinedTextField(value = if (value % 1.0 == 0.0) value.toInt().toString() else value.toString(), onValueChange = { it.toDoubleOrNull()?.let { n -> onChange(apply(n)) } }, label = { Text(label) }, singleLine = true, modifier = Modifier.width(104.dp))
+    }
+    Card(colors = CardDefaults.cardColors(containerColor = KaloriSurfaceAlt)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = meal.included, onCheckedChange = { onChange(meal.copy(included = it)) })
+                OutlinedTextField(item.name, { onChange(meal.copy(item = item.copy(name = it))) }, label = { Text("Yemek adı") }, singleLine = true, modifier = Modifier.weight(1f))
+                IconButton(onClick = onRemove) { Icon(Icons.Filled.DeleteOutline, "Çıkar", tint = KaloriDanger) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                number("Gram", item.grams) { grams -> meal.copy(item = scaleAiMeal(meal, grams)) }
+                number("Kalori", item.calories) { value -> meal.copy(item = item.copy(calories = value)) }
+                number("Protein", item.proteinG) { value -> meal.copy(item = item.copy(proteinG = value)) }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                number("Karb.", item.carbsG) { value -> meal.copy(item = item.copy(carbsG = value)) }
+                number("Yağ", item.fatG) { value -> meal.copy(item = item.copy(fatG = value)) }
+                Text("Güven ${(item.confidence * 100).toInt()}%", color = KaloriMuted, modifier = Modifier.padding(top = 16.dp))
             }
         }
     }
