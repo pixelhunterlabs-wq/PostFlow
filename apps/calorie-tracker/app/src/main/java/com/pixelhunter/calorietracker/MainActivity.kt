@@ -83,6 +83,32 @@ data class WeightEntry(
     fun dateText(): String = measuredAt.take(10)
 }
 
+@Serializable data class DailyWater(
+    val id: String = UUID.randomUUID().toString(), @SerialName("user_id") val userId: String,
+    @SerialName("target_date") val targetDate: String, @SerialName("water_ml") val waterMl: Int = 0
+)
+@Serializable data class FavoriteFood(
+    val id: String = UUID.randomUUID().toString(), @SerialName("user_id") val userId: String,
+    @SerialName("food_name") val foodName: String, val grams: Double = 100.0, val calories: Double = 0.0,
+    @SerialName("protein_g") val proteinG: Double = 0.0, @SerialName("carbs_g") val carbsG: Double = 0.0,
+    @SerialName("fat_g") val fatG: Double = 0.0, @SerialName("meal_type") val mealType: String = "Öğün",
+    val source: String = "favorite"
+) {
+    fun catalogFood() = CatalogFood(foodName, calories, proteinG, carbsG, fatG)
+}
+@Serializable data class SavedMealRemote(
+    val id: String = UUID.randomUUID().toString(), @SerialName("user_id") val userId: String,
+    val name: String, @SerialName("total_grams") val totalGrams: Double, val calories: Double,
+    @SerialName("protein_g") val proteinG: Double, @SerialName("carbs_g") val carbsG: Double,
+    @SerialName("fat_g") val fatG: Double
+)
+@Serializable data class SavedMealItemRemote(
+    @SerialName("saved_meal_id") val savedMealId: String, @SerialName("user_id") val userId: String,
+    @SerialName("food_name") val foodName: String, val grams: Double, val calories: Double,
+    @SerialName("protein_g") val proteinG: Double, @SerialName("carbs_g") val carbsG: Double,
+    @SerialName("fat_g") val fatG: Double
+)
+
 data class BarcodeProduct(
     val barcode: String,
     val name: String,
@@ -120,6 +146,9 @@ data class TrackerUiState(
     val calorieGoal: Int = 2000,
     val entries: List<CalorieEntry> = emptyList(),
     val weights: List<WeightEntry> = emptyList(),
+    val waterMl: Int = 0,
+    val favorites: List<FavoriteFood> = emptyList(),
+    val savedMeals: List<SavedMealRemote> = emptyList(),
     val barcodeLoading: Boolean = false,
     val barcodeProduct: BarcodeProduct? = null,
     val onboardingCompleted: Boolean = false,
@@ -187,9 +216,10 @@ class TrackerViewModel : ViewModel() {
                     uiState = uiState.copy(signedIn = false, loading = false)
                     return@launch
                 }
-                uiState = uiState.copy(loading = true, signedIn = true, email = user.email.orEmpty())
+                // Clear any previous account before rendering/loading this account.
+                uiState = TrackerUiState(loading = true, signedIn = true, email = user.email.orEmpty())
                 ensureProfile(user.id, user.email.orEmpty())
-                loadAll()
+                loadAccountData(user.id)
             }.onFailure { uiState = uiState.copy(loading = false, message = it.message ?: "Veriler yüklenemedi") }
         }
     }
@@ -215,8 +245,8 @@ class TrackerViewModel : ViewModel() {
     fun signOut() {
         val client = supabase ?: return
         viewModelScope.launch {
-            runCatching { client.auth.signOut() }
             uiState = TrackerUiState()
+            runCatching { client.auth.signOut() }
         }
     }
 
@@ -336,6 +366,55 @@ class TrackerViewModel : ViewModel() {
             }
                 .onFailure { uiState = uiState.copy(message = "Öğün silinemedi. Lütfen tekrar deneyin.") }
         }
+    }
+
+    private suspend fun loadAccountData(userId: String) {
+        val client = supabase ?: return
+        loadAll()
+        val today = LocalDate.now().toString()
+        val water = runCatching { client.from("calorie_daily_water").select { filter { eq("user_id", userId); eq("target_date", today) } }
+            .decodeList<DailyWater>().firstOrNull()?.waterMl ?: 0 }.getOrDefault(0)
+        val favorites = runCatching { client.from("calorie_favorite_foods").select { filter { eq("user_id", userId) } }.decodeList<FavoriteFood>() }.getOrDefault(emptyList())
+        val meals = runCatching { client.from("calorie_saved_meals").select { filter { eq("user_id", userId) } }.decodeList<SavedMealRemote>() }.getOrDefault(emptyList())
+        uiState = uiState.copy(waterMl = water, favorites = favorites, savedMeals = meals, barcodeProduct = null, loading = false)
+    }
+
+    fun changeWater(deltaMl: Int) {
+        val client = supabase ?: return
+        viewModelScope.launch { runCatching {
+            val user = client.auth.currentUserOrNull() ?: error("Oturum bulunamadı")
+            val next = (uiState.waterMl + deltaMl).coerceIn(0, 6000)
+            client.from("calorie_daily_water").upsert(DailyWater(userId = user.id, targetDate = LocalDate.now().toString(), waterMl = next)) { onConflict = "user_id,target_date" }
+            uiState = uiState.copy(waterMl = next)
+        }.onFailure { uiState = uiState.copy(message = "Su bilgisi güncellenemedi. Lütfen tekrar deneyin.") } }
+    }
+
+    fun toggleFavorite(food: CatalogFood) {
+        val client = supabase ?: return
+        viewModelScope.launch { runCatching {
+            val user = client.auth.currentUserOrNull() ?: error("Oturum bulunamadı")
+            val existing = uiState.favorites.firstOrNull { it.foodName.equals(food.name, true) }
+            if (existing == null) client.from("calorie_favorite_foods").insert(FavoriteFood(userId = user.id, foodName = food.name, calories = food.calories100g, proteinG = food.protein100g, carbsG = food.carbs100g, fatG = food.fat100g))
+            else client.from("calorie_favorite_foods").delete { filter { eq("id", existing.id); eq("user_id", user.id) } }
+            loadAccountData(user.id)
+        }.onFailure { uiState = uiState.copy(message = "Favoriler güncellenemedi. Lütfen tekrar deneyin.") } }
+    }
+
+    fun saveMeal(name: String, items: List<RecipeIngredient>) {
+        val client = supabase ?: return
+        viewModelScope.launch { runCatching {
+            val user = client.auth.currentUserOrNull() ?: error("Oturum bulunamadı")
+            val id = UUID.randomUUID().toString()
+            val mapped = items.map { ingredient ->
+                val ratio = ingredient.grams / 100.0
+                SavedMealItemRemote(id, user.id, ingredient.food.name, ingredient.grams,
+                    ingredient.food.calories100g * ratio, ingredient.food.protein100g * ratio,
+                    ingredient.food.carbs100g * ratio, ingredient.food.fat100g * ratio)
+            }
+            client.from("calorie_saved_meals").insert(SavedMealRemote(id, user.id, name.trim(), mapped.sumOf { it.grams }, mapped.sumOf { it.calories }, mapped.sumOf { it.proteinG }, mapped.sumOf { it.carbsG }, mapped.sumOf { it.fatG }))
+            client.from("calorie_saved_meal_items").insert(mapped)
+            loadAccountData(user.id)
+        }.onFailure { uiState = uiState.copy(message = "Kayıtlı öğünler güncellenemedi. Lütfen tekrar deneyin.") } }
     }
 
     fun completeOnboarding(calories: Int, weight: Double) {

@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import java.util.UUID
 
 class RecipeBuilderActivity : ComponentActivity() {
@@ -36,7 +37,7 @@ data class RecipeIngredient(val food: CatalogFood, val grams: Double)
 @Composable
 private fun RecipeBuilderScreen() {
     val context = LocalContext.current
-    val store = remember(context) { AdvancedWellnessStore(context) }
+    val vm: TrackerViewModel = viewModel()
     var recipeName by remember { mutableStateOf("") }
     var query by remember { mutableStateOf("") }
     var ingredients by remember { mutableStateOf<List<RecipeIngredient>>(emptyList()) }
@@ -165,17 +166,7 @@ private fun RecipeBuilderScreen() {
                 Button(
                     enabled = recipeName.isNotBlank() && ingredients.isNotEmpty(),
                     onClick = {
-                        store.saveMeal(
-                            SavedMeal(
-                                id = UUID.randomUUID().toString(),
-                                name = recipeName.trim(),
-                                calories = calories,
-                                proteinG = protein,
-                                carbsG = carbs,
-                                fatG = fat,
-                                grams = totalGrams
-                            )
-                        )
+                        vm.saveMeal(recipeName.trim(), ingredients)
                         message = "Öğün kaydedildi"
                         recipeName = ""
                         query = ""

@@ -81,8 +81,6 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
     var mealActionEntry by remember { mutableStateOf<CalorieEntry?>(null) }
     var editingDiaryEntry by remember { mutableStateOf<CalorieEntry?>(null) }
     var showDeleteAccount by remember { mutableStateOf(false) }
-    var waterMl by remember { mutableIntStateOf(store.waterMl()) }
-    var favorites by remember { mutableStateOf(store.favorites()) }
     var onboardingDone by remember(state.email) { mutableStateOf(state.email.isNotBlank() && store.onboardingDone(state.email)) }
 
     val scannerOptions = remember {
@@ -198,9 +196,9 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
             when (tab) {
                 MainTab.HOME -> HomeScreen(
                     state = state,
-                    waterMl = waterMl,
-                    onAddWater = { waterMl = store.addWater(250) },
-                    onRemoveWater = { waterMl = store.removeWater(250) },
+                    waterMl = state.waterMl,
+                    onAddWater = { vm.changeWater(250) },
+                    onRemoveWater = { vm.changeWater(-250) },
                     onFood = { showFoodSearch = true },
                     onPhoto = ::openPhoto,
                     onBarcode = ::scanBarcode,
@@ -231,12 +229,10 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
 
     if (showFoodSearch) {
         FoodSearchDialog(
-            favorites = favorites,
+            favorites = state.favorites.map { it.catalogFood() },
             recent = state.recentFoods,
             onDismiss = { showFoodSearch = false },
-            onToggleFavorite = {
-                favorites = store.toggleFavorite(it)
-            },
+            onToggleFavorite = vm::toggleFavorite,
             onAddCatalog = { food, meal, grams ->
                 val ratio = grams / 100.0
                 vm.addFood(food.name, meal, grams, food.calories100g * ratio, food.protein100g * ratio, food.carbs100g * ratio, food.fat100g * ratio, "turkish_catalog")
