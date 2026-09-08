@@ -352,13 +352,13 @@ private fun OnboardingScreen(email: String, onComplete: (Int, Double) -> Unit) {
     var height by remember { mutableStateOf("") }
     var weight by remember { mutableStateOf("") }
     var activity by remember { mutableDoubleStateOf(1.375) }
-    var goal by remember { mutableDoubleStateOf(0.25) }
+    var goal by remember { mutableDoubleStateOf(-0.25) }
 
     val ageN = age.toIntOrNull()
     val heightN = height.toDoubleOrNull()
     val weightN = weight.toDoubleOrNull()
     val valid = ageN != null && ageN in 14..100 && heightN != null && heightN in 120.0..230.0 && weightN != null && weightN in 35.0..300.0
-    val estimate = if (valid) recommendedCalories(gender, ageN!!, heightN!!, weightN!!, activity, goal) else 0
+    val calculated = if (valid) GoalCalculator.goals(PersonalGoalInput(gender, ageN!!, heightN!!, weightN!!, activity, goal)) else null
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
@@ -385,18 +385,19 @@ private fun OnboardingScreen(email: String, onComplete: (Int, Double) -> Unit) {
         item {
             Text("Haftalık hedef", fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("Koru" to 0.0, "−0.25 kg" to 0.25, "−0.5 kg" to 0.5).forEach { (label, value) ->
+                listOf("Koru" to 0.0, "−0.25 kg" to -0.25, "−0.5 kg" to -0.5, "−0.75 kg" to -0.75, "+0.25 kg" to 0.25).forEach { (label, value) ->
                     FilterChip(selected = goal == value, onClick = { goal = value }, label = { Text(label) })
                 }
             }
         }
-        if (estimate > 0) item {
+        calculated?.let { estimate -> item {
             AccentCard {
                 Text("Önerilen başlangıç hedefi", color = KaloriMuted)
-                Text("$estimate kcal / gün", style = MaterialTheme.typography.headlineMedium, color = KaloriGreen, fontWeight = FontWeight.Black)
+                Text("${estimate.calories} kcal / gün", style = MaterialTheme.typography.headlineMedium, color = KaloriGreen, fontWeight = FontWeight.Black)
+                Text("Protein ${estimate.proteinG} g • Karbonhidrat ${estimate.carbsG} g • Yağ ${estimate.fatG} g", color = KaloriText)
             }
-        }
-        item { Button(enabled = valid, onClick = { onComplete(estimate, weightN ?: 0.0) }, modifier = Modifier.fillMaxWidth().height(54.dp)) { Text("Hedefimi oluştur") } }
+        } }
+        item { Button(enabled = calculated != null, onClick = { onComplete(calculated?.calories ?: 0, weightN ?: 0.0) }, modifier = Modifier.fillMaxWidth().height(54.dp)) { Text("Bu hedefi kullan") } }
     }
 }
 
