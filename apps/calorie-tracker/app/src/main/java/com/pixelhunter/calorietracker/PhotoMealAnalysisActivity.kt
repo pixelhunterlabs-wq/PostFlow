@@ -293,10 +293,7 @@ private suspend fun analyzePhotoBytes(bytes: ByteArray, mimeType: String): AiMea
         val responseCode = connection.responseCode
         val stream = if (responseCode in 200..299) connection.inputStream else connection.errorStream
         val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-        if (responseCode == 503 && text.contains("ai_not_configured")) {
-            error("AI fotoğraf analizi henüz yapılandırılmadı")
-        }
-        if (responseCode !in 200..299) error("Fotoğraf analizi başarısız ($responseCode)")
+        if (responseCode !in 200..299) error(aiPhotoError(responseCode, text))
         Json { ignoreUnknownKeys = true }.decodeFromString<AiMealAnalysis>(text)
     } finally {
         connection.disconnect()
