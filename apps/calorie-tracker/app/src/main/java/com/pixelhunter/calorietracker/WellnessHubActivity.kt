@@ -281,6 +281,14 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
         }
     }
 
+    editingSavedMeal?.let { meal ->
+        SavedMealEditDialog(
+            meal = meal,
+            initialItems = state.editingSavedMealItems,
+            onDismiss = { editingSavedMeal = null },
+            onSave = { name, items -> vm.updateSavedMeal(meal, name, items); editingSavedMeal = null }
+        )
+    }
 }
 
 @Composable
@@ -311,14 +319,6 @@ private fun ToolCard(
         }
     }
 
-    editingSavedMeal?.let { meal ->
-        SavedMealEditDialog(
-            meal = meal,
-            initialItems = state.editingSavedMealItems,
-            onDismiss = { editingSavedMeal = null },
-            onSave = { name, items -> vm.updateSavedMeal(meal, name, items); editingSavedMeal = null }
-        )
-    }
 }
 
 @Composable
