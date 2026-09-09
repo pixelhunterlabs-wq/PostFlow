@@ -132,6 +132,8 @@ private fun VoiceLogScreen(vm: TrackerViewModel = viewModel()) {
                             Column(Modifier.weight(1f)) {
                                 Text(item.food.name, fontWeight = FontWeight.Bold)
                                 Text("${item.grams.toInt()} g • ${(item.food.calories100g * ratio).toInt()} kcal", color = KaloriMuted)
+                                item.portionNote?.let { Text(it, color = KaloriGreen, style = MaterialTheme.typography.labelSmall) }
+                                if (item.needsPortionReview) Text("Porsiyon miktarı kontrol edilmeli", color = KaloriYellow, style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }
