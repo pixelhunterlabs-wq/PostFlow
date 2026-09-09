@@ -2,6 +2,7 @@ package com.pixelhunter.calorietracker
 
 import android.Manifest
 import android.content.Intent
+import android.app.TimePickerDialog
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -168,6 +169,8 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
                 }
             }
 
+            item { ReminderSettings(store) { MealReminderScheduler.enable(context) } }
+
             item {
                 HubCard {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -319,6 +322,26 @@ private fun ToolCard(
         }
     }
 
+}
+
+@Composable
+private fun ReminderSettings(store: AdvancedWellnessStore, onChanged: () -> Unit) {
+    val context = LocalContext.current
+    val items = listOf("breakfast" to "Kahvaltı", "lunch" to "Öğle", "dinner" to "Akşam", "snack" to "Atıştırmalık")
+    HubCard {
+        Text("Öğün hatırlatmaları", fontWeight = FontWeight.Bold)
+        Text("Her öğün için saati seçebilir veya hatırlatmayı kapatabilirsin.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+        items.forEachIndexed { index, (key, label) ->
+            var enabled by remember { mutableStateOf(store.reminderEnabled(key)) }
+            var hour by remember { mutableIntStateOf(store.reminderHour(key, listOf(8, 13, 19, 16)[index])) }
+            var minute by remember { mutableIntStateOf(store.reminderMinute(key)) }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { Text(label, fontWeight = FontWeight.SemiBold); Text(String.format("%02d:%02d", hour, minute), color = KaloriGreen) }
+                TextButton(onClick = { TimePickerDialog(context, { _, h, m -> hour = h; minute = m; store.saveReminder(key, enabled, h, m); onChanged() }, hour, minute, true).show() }) { Text("Saat") }
+                Switch(checked = enabled, onCheckedChange = { enabled = it; store.saveReminder(key, it, hour, minute); onChanged() })
+            }
+        }
+    }
 }
 
 @Composable

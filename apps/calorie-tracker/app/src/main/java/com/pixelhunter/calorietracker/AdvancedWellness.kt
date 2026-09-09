@@ -44,6 +44,13 @@ class AdvancedWellnessStore(context: Context) {
         prefs.edit().putBoolean("meal_reminders", value).apply()
     }
 
+    fun reminderEnabled(key: String, default: Boolean = true): Boolean = prefs.getBoolean("reminder_${key}_enabled", default)
+    fun reminderHour(key: String, default: Int): Int = prefs.getInt("reminder_${key}_hour", default).coerceIn(0, 23)
+    fun reminderMinute(key: String): Int = prefs.getInt("reminder_${key}_minute", 0).coerceIn(0, 59)
+    fun saveReminder(key: String, enabled: Boolean, hour: Int, minute: Int) {
+        prefs.edit().putBoolean("reminder_${key}_enabled", enabled).putInt("reminder_${key}_hour", hour.coerceIn(0, 23)).putInt("reminder_${key}_minute", minute.coerceIn(0, 59)).apply()
+    }
+
     fun targetWeeklyLossKg(): Double = java.lang.Double.longBitsToDouble(
         prefs.getLong("weekly_loss_bits", java.lang.Double.doubleToRawLongBits(0.25))
     )
@@ -100,25 +107,26 @@ fun dynamicGoalSuggestion(
 object MealReminderScheduler {
     private const val CHANNEL_ID = "meal_reminders"
     private val reminders = listOf(
-        Triple(8101, 8, "Kahvaltını kaydetmeyi unutma"),
-        Triple(8102, 13, "Öğle öğününü günlüğüne ekle"),
-        Triple(8103, 19, "Akşam öğününü kaydet ve gününü tamamla")
+        Reminder(8101, "breakfast", 8, "Kahvaltını kaydetmeyi unutma"), Reminder(8102, "lunch", 13, "Öğle öğününü günlüğüne ekle"),
+        Reminder(8103, "dinner", 19, "Akşam öğününü kaydet ve gününü tamamla"), Reminder(8104, "snack", 16, "Atıştırmalığını kaydetmeyi unutma")
     )
+    private data class Reminder(val requestCode: Int, val key: String, val defaultHour: Int, val message: String)
 
     fun enable(context: Context) {
         createChannel(context)
-        reminders.forEach { (requestCode, hour, message) -> schedule(context, requestCode, hour, message) }
+        val store = AdvancedWellnessStore(context)
+        reminders.forEach { reminder -> if (store.reminderEnabled(reminder.key)) schedule(context, reminder.requestCode, store.reminderHour(reminder.key, reminder.defaultHour), store.reminderMinute(reminder.key), reminder.message) }
     }
 
     fun disable(context: Context) {
         val alarm = context.getSystemService(AlarmManager::class.java)
-        reminders.forEach { (requestCode, _, _) -> alarm.cancel(pendingIntent(context, requestCode, "")) }
+        reminders.forEach { reminder -> alarm.cancel(pendingIntent(context, reminder.requestCode, "")) }
     }
 
-    private fun schedule(context: Context, requestCode: Int, hour: Int, message: String) {
+    private fun schedule(context: Context, requestCode: Int, hour: Int, minute: Int, message: String) {
         val alarm = context.getSystemService(AlarmManager::class.java)
         val now = LocalDateTime.now()
-        var next = now.toLocalDate().atTime(hour, 0)
+        var next = now.toLocalDate().atTime(hour, minute)
         if (!next.isAfter(now)) next = next.plusDays(1)
         val millis = next.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         alarm.setInexactRepeating(
