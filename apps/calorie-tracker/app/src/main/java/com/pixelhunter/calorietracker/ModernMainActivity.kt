@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -452,7 +453,7 @@ private fun HomeScreen(
                             modifier = Modifier.fillMaxSize(),
                             strokeWidth = 14.dp,
                             color = KaloriGreen,
-                            trackColor = Color(0xFF1D2B26)
+                            trackColor = Color(0xFF26312C)
                         )
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(Icons.Filled.LocalFireDepartment, null, tint = KaloriYellow)
@@ -479,12 +480,12 @@ private fun HomeScreen(
         item {
             AccentCard {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.WaterDrop, null, tint = KaloriBlue, modifier = Modifier.size(32.dp))
+                    Icon(Icons.Filled.WaterDrop, null, tint = KaloriWater, modifier = Modifier.size(32.dp))
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                         Text("Günlük Su", fontWeight = FontWeight.Bold)
                         Text("$waterMl ml / 2500 ml", color = KaloriMuted)
-                        LinearProgressIndicator(progress = { (waterMl / 2500f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(7.dp), color = KaloriBlue, trackColor = Color(0xFF1C2C2B))
+                        LinearProgressIndicator(progress = { (waterMl / 2500f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().height(8.dp), color = KaloriWater, trackColor = Color(0xFF26312C))
                     }
                     FilledTonalButton(onClick = onRemoveWater, enabled = waterMl > 0) { Text("−250") }
                     FilledTonalButton(onClick = onAddWater) { Text("+250") }
@@ -537,7 +538,7 @@ private fun CaloriesMetric(label: String, value: String, color: Color) {
 
 @Composable
 private fun QuickActionCard(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, accent: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Card(onClick = onClick, modifier = modifier.height(88.dp), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = KaloriSurfaceAlt)) {
+    Card(onClick = onClick, modifier = modifier.height(94.dp), shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, KaloriBorder), colors = CardDefaults.cardColors(containerColor = KaloriSurfaceAlt)) {
         Column(Modifier.fillMaxSize().padding(14.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Icon(icon, label, tint = accent)
             Text(label, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
@@ -981,8 +982,8 @@ private fun SettingsRow(icon: androidx.compose.ui.graphics.vector.ImageVector, t
 
 @Composable
 private fun AccentCard(content: @Composable ColumnScope.() -> Unit) {
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KaloriSurface), shape = RoundedCornerShape(18.dp)) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = KaloriSurface), border = BorderStroke(1.dp, KaloriBorder), shape = RoundedCornerShape(22.dp)) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
     }
 }
 

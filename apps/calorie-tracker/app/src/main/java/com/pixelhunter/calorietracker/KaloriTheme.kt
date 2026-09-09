@@ -10,6 +10,7 @@ import androidx.compose.ui.unit.dp
 
 val KaloriGreen = Color(0xFF00E676)
 val KaloriGreenSoft = Color(0xFF21F38A)
+val KaloriGreenSecondary = Color(0xFF19E37A)
 val KaloriBackground = Color(0xFF050807)
 val KaloriSurface = Color(0xFF101715)
 val KaloriSurfaceAlt = Color(0xFF121A17)
@@ -19,8 +20,10 @@ val KaloriInput = Color(0xFF151821)
 val KaloriText = Color(0xFFF5F7F6)
 val KaloriMuted = Color(0xFFA7B0AB)
 val KaloriBlue = Color(0xFF39A9FF)
+val KaloriWater = Color(0xFF4FC3F7)
+val KaloriProtein = Color(0xFF22E37D)
 val KaloriYellow = Color(0xFFFFB020)
-val KaloriDanger = Color(0xFFFF5A5F)
+val KaloriDanger = Color(0xFFFF5C6C)
 
 private val KaloriDarkColors = darkColorScheme(
     primary = KaloriGreen,
