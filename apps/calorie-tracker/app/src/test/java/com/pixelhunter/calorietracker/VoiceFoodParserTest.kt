@@ -28,4 +28,11 @@ class VoiceFoodParserTest {
     fun ignoresUnknownFood() {
         assertTrue(parseVoiceFoods("bir şeyler yedim").isEmpty())
     }
+
+    @Test fun scalesEditedVoiceResult() {
+        val pilav = parseVoiceFoods("1 tabak pilav").single()
+        val edited = scaleVoiceFood(pilav, 150.0)
+        assertEquals(150.0, edited.grams, 0.01)
+        assertEquals(pilav.calories * .75, edited.calories, .01)
+    }
 }

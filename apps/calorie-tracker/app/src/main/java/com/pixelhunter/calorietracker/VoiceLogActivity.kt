@@ -41,6 +41,7 @@ private fun VoiceLogScreen(vm: TrackerViewModel = viewModel()) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var transcript by remember { mutableStateOf("") }
     var parsed by remember { mutableStateOf<List<ParsedVoiceFood>>(emptyList()) }
+    var editing by remember { mutableStateOf<ParsedVoiceFood?>(null) }
     var mealType by remember { mutableStateOf("Öğün") }
     var status by remember { mutableStateOf("Mikrofona dokun ve yediğini söyle") }
 
@@ -124,14 +125,13 @@ private fun VoiceLogScreen(vm: TrackerViewModel = viewModel()) {
                     }
                 }
                 items(parsed, key = { it.originalSegment }) { item ->
-                    val ratio = item.grams / 100.0
-                    Card(colors = CardDefaults.cardColors(containerColor = KaloriSurface)) {
+                    Card(onClick = { editing = item }, colors = CardDefaults.cardColors(containerColor = KaloriSurface)) {
                         Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Restaurant, null, tint = KaloriGreen)
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(item.food.name, fontWeight = FontWeight.Bold)
-                                Text("${item.grams.toInt()} g • ${(item.food.calories100g * ratio).toInt()} kcal", color = KaloriMuted)
+                                Text("${item.grams.toInt()} g • ${item.calories.toInt()} kcal", color = KaloriMuted)
                                 item.portionNote?.let { Text(it, color = KaloriGreen, style = MaterialTheme.typography.labelSmall) }
                                 if (item.needsPortionReview) Text("Porsiyon miktarı kontrol edilmeli", color = KaloriYellow, style = MaterialTheme.typography.labelSmall)
                             }
@@ -142,15 +142,11 @@ private fun VoiceLogScreen(vm: TrackerViewModel = viewModel()) {
                     Button(
                         onClick = {
                             parsed.forEach { item ->
-                                val ratio = item.grams / 100.0
                                 vm.addFood(
                                     item.food.name,
                                     mealType,
                                     item.grams,
-                                    item.food.calories100g * ratio,
-                                    item.food.protein100g * ratio,
-                                    item.food.carbs100g * ratio,
-                                    item.food.fat100g * ratio,
+                                    item.calories, item.protein, item.carbs, item.fat,
                                     "voice"
                                 )
                             }
@@ -164,4 +160,19 @@ private fun VoiceLogScreen(vm: TrackerViewModel = viewModel()) {
             }
         }
     }
+    editing?.let { item -> VoiceFoodEditDialog(item, { editing = null }, { updated -> parsed = parsed.map { if (it === item) updated else it }; editing = null }, { parsed = parsed.filterNot { it === item }; editing = null }) }
+}
+
+@Composable
+private fun VoiceFoodEditDialog(item: ParsedVoiceFood, onDismiss: () -> Unit, onSave: (ParsedVoiceFood) -> Unit, onRemove: () -> Unit) {
+    var value by remember(item) { mutableStateOf(item) }
+    fun updateNumber(text: String, change: (Double) -> ParsedVoiceFood) { text.toDoubleOrNull()?.let { value = change(it) } }
+    AlertDialog(onDismissRequest = onDismiss, containerColor = KaloriDialog, title = { Text("Ses sonucunu düzenle", color = KaloriText) }, text = { Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        OutlinedTextField(value.food.name, { name -> value = value.copy(food = value.food.copy(name = name)) }, label = { Text("Yemek adı") })
+        OutlinedTextField(value.grams.toString(), { updateNumber(it) { grams -> if (grams > 0) scaleVoiceFood(value, grams) else value.copy(grams = grams) } }, label = { Text("Gram") })
+        OutlinedTextField(value.calories.toString(), { updateNumber(it) { n -> value.copy(calories = n) } }, label = { Text("Kalori") })
+        OutlinedTextField(value.protein.toString(), { updateNumber(it) { n -> value.copy(protein = n) } }, label = { Text("Protein") })
+        OutlinedTextField(value.carbs.toString(), { updateNumber(it) { n -> value.copy(carbs = n) } }, label = { Text("Karbonhidrat") })
+        OutlinedTextField(value.fat.toString(), { updateNumber(it) { n -> value.copy(fat = n) } }, label = { Text("Yağ") })
+    } }, confirmButton = { Button(enabled = isValidVoiceFood(value), onClick = { onSave(value) }) { Text("Kaydet") } }, dismissButton = { Row { TextButton(onClick = onRemove) { Text("Listeden çıkar", color = KaloriDanger) }; TextButton(onClick = onDismiss) { Text("Vazgeç", color = KaloriMuted) } } })
 }

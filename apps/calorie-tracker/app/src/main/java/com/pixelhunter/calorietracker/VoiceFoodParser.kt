@@ -7,8 +7,19 @@ data class ParsedVoiceFood(
     val grams: Double,
     val originalSegment: String,
     val portionNote: String? = null,
-    val needsPortionReview: Boolean = false
+    val needsPortionReview: Boolean = false,
+    val calories: Double = food.calories100g * grams / 100.0,
+    val protein: Double = food.protein100g * grams / 100.0,
+    val carbs: Double = food.carbs100g * grams / 100.0,
+    val fat: Double = food.fat100g * grams / 100.0
 )
+
+fun scaleVoiceFood(item: ParsedVoiceFood, grams: Double): ParsedVoiceFood {
+    require(grams > 0)
+    val ratio = grams / item.grams
+    return item.copy(grams = grams, calories = item.calories * ratio, protein = item.protein * ratio, carbs = item.carbs * ratio, fat = item.fat * ratio)
+}
+fun isValidVoiceFood(item: ParsedVoiceFood) = item.food.name.isNotBlank() && item.grams > 0 && item.calories >= 0 && item.protein >= 0 && item.carbs >= 0 && item.fat >= 0
 
 object VoicePortionSupport {
     fun grams(food: CatalogFood, unit: String?, amount: Double?): Pair<Double, String?>? {
