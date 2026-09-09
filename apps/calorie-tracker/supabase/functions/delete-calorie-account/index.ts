@@ -28,6 +28,10 @@ Deno.serve(async (req: Request) => {
   }
 
   const tables = [
+    'calorie_saved_meal_items',
+    'calorie_saved_meals',
+    'calorie_daily_water',
+    'calorie_favorite_foods',
     'calorie_food_entries',
     'calorie_weight_entries',
     'calorie_daily_targets',

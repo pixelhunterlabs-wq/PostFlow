@@ -192,8 +192,11 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
                                         selectedUri?.let { analyzePhoto(context, it) }
                                             ?: error("Önce fotoğraf çek veya seç")
                                     }
-                                        .onSuccess { result -> analysis = result; editableItems = result.items.map(::EditableAiMeal) }
-                                        .onFailure { snackbar.showSnackbar(it.message ?: "Fotoğraf analiz edilemedi") }
+                                        .onSuccess { result ->
+                                            if (result.items.isEmpty()) snackbar.showSnackbar("Fotoğrafta güvenilir bir yemek tespit edilemedi. Başka bir fotoğraf dene.")
+                                            else { analysis = result; editableItems = result.items.map(::EditableAiMeal) }
+                                        }
+                                        .onFailure { snackbar.showSnackbar("Fotoğraf analiz edilemedi. Lütfen tekrar dene.") }
                                     loading = false
                                 }
                             },

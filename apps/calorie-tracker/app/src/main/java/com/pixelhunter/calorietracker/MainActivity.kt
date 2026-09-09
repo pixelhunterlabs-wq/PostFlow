@@ -238,7 +238,7 @@ class TrackerViewModel : ViewModel() {
             }.onFailure {
                 uiState = uiState.copy(
                     loading = false,
-                    message = it.message ?: "Google girişi başlatılamadı"
+                    message = "Google girişi başlatılamadı. Lütfen tekrar deneyin."
                 )
             }
         }
@@ -262,7 +262,7 @@ class TrackerViewModel : ViewModel() {
                 runCatching { client.auth.signOut() }
                 uiState = TrackerUiState(message = "Hesabın ve Kalori Takip verilerin silindi")
             }.onFailure {
-                uiState = uiState.copy(accountDeleting = false, message = it.message ?: "Hesap silinemedi")
+                uiState = uiState.copy(accountDeleting = false, message = "Hesap silinemedi. Lütfen tekrar deneyin.")
             }
         }
     }
@@ -316,7 +316,7 @@ class TrackerViewModel : ViewModel() {
                     barcodeLoading = false,
                     barcodeProduct = product
                 )
-            }.onFailure { uiState = uiState.copy(barcodeLoading = false, message = it.message ?: "Barkod ürünü alınamadı") }
+            }.onFailure { uiState = uiState.copy(barcodeLoading = false, message = "Barkod bilgisi alınamadı. Lütfen tekrar deneyin.") }
         }
     }
 
@@ -340,7 +340,7 @@ class TrackerViewModel : ViewModel() {
                 )
                 loadAll()
                 uiState = uiState.copy(message = "Yemek kaydı eklendi")
-            }.onFailure { uiState = uiState.copy(message = it.message ?: "Yemek eklenemedi") }
+            }.onFailure { uiState = uiState.copy(message = "Yemek eklenemedi. Lütfen tekrar deneyin.") }
         }
     }
 
@@ -480,7 +480,7 @@ class TrackerViewModel : ViewModel() {
         viewModelScope.launch {
             val user = client.auth.currentUserOrNull() ?: return@launch
             runCatching { client.from("calorie_weight_entries").insert(WeightEntry(userId = user.id, weightKg = weightKg)); loadAll(); uiState = uiState.copy(message = "Kilo kaydı eklendi") }
-                .onFailure { uiState = uiState.copy(message = it.message ?: "Kilo kaydı eklenemedi") }
+                .onFailure { uiState = uiState.copy(message = "Kilo kaydı eklenemedi. Lütfen tekrar deneyin.") }
         }
     }
 
@@ -509,7 +509,7 @@ class TrackerViewModel : ViewModel() {
                 val existing = client.from("calorie_profiles").select().decodeList<CalorieProfile>().firstOrNull()
                 client.from("calorie_profiles").upsert((existing ?: CalorieProfile(userId = user.id, email = user.email)).copy(dailyCalorieTarget = goal))
                 uiState = uiState.copy(calorieGoal = goal, message = "Günlük hedef güncellendi")
-            }.onFailure { uiState = uiState.copy(message = it.message ?: "Hedef güncellenemedi") }
+            }.onFailure { uiState = uiState.copy(message = "Hedef güncellenemedi. Lütfen tekrar deneyin.") }
         }
     }
 }
