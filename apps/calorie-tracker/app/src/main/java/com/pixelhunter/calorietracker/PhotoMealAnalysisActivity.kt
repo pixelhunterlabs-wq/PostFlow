@@ -37,6 +37,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -291,9 +292,16 @@ private fun AiMealEditor(meal: EditableAiMeal, onChange: (EditableAiMeal) -> Uni
 }
 
 private suspend fun analyzePhoto(context: android.content.Context, uri: Uri): AiMealAnalysis = withContext(Dispatchers.IO) {
-    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Fotoğraf okunamadı")
-    val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
-    analyzePhotoBytes(bytes, mimeType)
+    val original = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Fotoğraf okunamadı")
+    analyzePhotoBytes(compressMealPhoto(original), "image/jpeg")
+}
+
+private fun compressMealPhoto(bytes: ByteArray): ByteArray {
+    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return bytes
+    val maxSide = 1800
+    val scale = maxOf(bitmap.width, bitmap.height).toDouble() / maxSide
+    val scaled = if (scale > 1) android.graphics.Bitmap.createScaledBitmap(bitmap, (bitmap.width / scale).toInt(), (bitmap.height / scale).toInt(), true) else bitmap
+    return ByteArrayOutputStream().use { output -> scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 84, output); output.toByteArray() }
 }
 
 private suspend fun analyzePhotoBytes(bytes: ByteArray, mimeType: String): AiMealAnalysis = withContext(Dispatchers.IO) {

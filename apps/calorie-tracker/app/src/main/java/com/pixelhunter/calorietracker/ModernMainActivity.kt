@@ -81,7 +81,6 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
     var mealActionEntry by remember { mutableStateOf<CalorieEntry?>(null) }
     var editingDiaryEntry by remember { mutableStateOf<CalorieEntry?>(null) }
     var showDeleteAccount by remember { mutableStateOf(false) }
-    var onboardingDone by remember(state.email) { mutableStateOf(state.email.isNotBlank() && store.onboardingDone(state.email)) }
 
     val scannerOptions = remember {
         GmsBarcodeScannerOptions.Builder()
@@ -126,6 +125,11 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
         return
     }
 
+    if (state.authChecking) {
+        FullCenterMessage("Oturum açılıyor", "Hesabın kontrol ediliyor.")
+        return
+    }
+
     if (!state.signedIn) {
         LoginScreen(
             loading = state.loading,
@@ -135,13 +139,11 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
         return
     }
 
-    if (!onboardingDone && !state.onboardingCompleted && state.entries.isEmpty()) {
+    if (!state.onboardingCompleted && state.entries.isEmpty()) {
         OnboardingScreen(
             email = state.email,
             onComplete = { calories, weight ->
                 vm.completeOnboarding(calories, weight)
-                store.markOnboardingDone(state.email)
-                onboardingDone = true
             }
         )
         return

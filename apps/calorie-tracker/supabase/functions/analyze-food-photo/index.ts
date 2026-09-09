@@ -64,13 +64,15 @@ Deno.serve(async (req: Request) => {
         ],
       }],
       max_output_tokens: 1400,
+      text: { format: { type: "json_schema", name: "meal_analysis", strict: true, schema: { type: "object", additionalProperties: false, required: ["items", "note"], properties: { items: { type: "array", items: { type: "object", additionalProperties: false, required: ["name", "grams", "calories", "protein_g", "carbs_g", "fat_g", "confidence"], properties: { name: { type: "string" }, grams: { type: "number" }, calories: { type: "number" }, protein_g: { type: "number" }, carbs_g: { type: "number" }, fat_g: { type: "number" }, confidence: { type: "number" } } } }, note: { type: "string" } } } },
     }),
   });
 
   if (!aiResponse.ok) {
-    const upstream = await aiResponse.text();
-    console.error("OpenAI response error", aiResponse.status, upstream.slice(0, 1000));
-    return new Response(JSON.stringify({ error: "ai_request_failed" }), { status: 502, headers: jsonHeaders });
+    const requestId = aiResponse.headers.get("x-request-id") ?? "none";
+    const kind = aiResponse.status === 401 || aiResponse.status === 403 ? "openai_auth_failed" : aiResponse.status === 429 ? "openai_rate_limited" : aiResponse.status === 400 ? "openai_bad_request" : aiResponse.status >= 500 ? "openai_unavailable" : "ai_request_failed";
+    console.error("OpenAI request failed", { status: aiResponse.status, requestId, kind });
+    return new Response(JSON.stringify({ error: kind }), { status: aiResponse.status === 429 ? 429 : 502, headers: jsonHeaders });
   }
 
   const raw = await aiResponse.json();
@@ -80,8 +82,7 @@ Deno.serve(async (req: Request) => {
 
   let analysis: { items?: MealItem[]; total?: Record<string, number>; note?: string };
   try {
-    const candidate = outputText.match(/\{[\s\S]*\}/)?.[0] ?? outputText;
-    analysis = JSON.parse(candidate);
+    analysis = JSON.parse(outputText);
   } catch {
     console.error("Unable to parse AI JSON", outputText.slice(0, 1500));
     return new Response(JSON.stringify({ error: "invalid_ai_response" }), { status: 502, headers: jsonHeaders });

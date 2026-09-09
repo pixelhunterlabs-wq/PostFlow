@@ -10,9 +10,12 @@ fun isValidAiMeal(item: AiMealItem): Boolean = item.grams > 0 && item.calories >
     item.proteinG >= 0 && item.carbsG >= 0 && item.fatG >= 0
 fun selectedAiMeals(meals: List<EditableAiMeal>): List<AiMealItem> = meals.filter { it.included }.map { it.item }
 fun aiPhotoError(code: Int, body: String = ""): String = when {
-    code == 401 -> "Oturumunun süresi doldu. Lütfen tekrar giriş yap."
+    code == 401 -> "Oturum süren dolmuş. Tekrar giriş yap."
     code == 413 -> "Fotoğraf çok büyük. Daha küçük bir fotoğraf seç."
-    code == 503 && body.contains("ai_not_configured") -> "AI fotoğraf analizi şu anda kullanıma hazır değil."
-    code == 502 -> "Fotoğraf şu anda analiz edilemedi. Lütfen tekrar dene."
-    else -> "Bağlantı kurulamadı. İnternet bağlantını kontrol edip tekrar dene."
+    body.contains("ai_not_configured") -> "AI analizi şu anda yapılandırılmamış."
+    body.contains("openai_rate_limited") -> "AI servisi şu anda yoğun. Biraz sonra tekrar dene."
+    body.contains("openai_auth_failed") -> "AI servisine şu anda bağlanılamıyor."
+    body.contains("openai_bad_request") -> "Fotoğraf şu anda analiz edilemedi. Başka bir fotoğraf dene."
+    body.contains("openai_unavailable") -> "AI servisi geçici olarak kullanılamıyor. Biraz sonra tekrar dene."
+    else -> "İnternet bağlantını kontrol edip tekrar dene."
 }

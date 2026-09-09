@@ -141,6 +141,7 @@ object SupabaseProvider {
 
 data class TrackerUiState(
     val loading: Boolean = false,
+    val authChecking: Boolean = true,
     val signedIn: Boolean = false,
     val email: String = "",
     val calorieGoal: Int = 2000,
@@ -214,14 +215,14 @@ class TrackerViewModel : ViewModel() {
             runCatching {
                 val user = client.auth.currentUserOrNull()
                 if (user == null) {
-                    uiState = uiState.copy(signedIn = false, loading = false)
+                    uiState = uiState.copy(signedIn = false, loading = false, authChecking = false)
                     return@launch
                 }
                 // Clear any previous account before rendering/loading this account.
-                uiState = TrackerUiState(loading = true, signedIn = true, email = user.email.orEmpty())
+                uiState = TrackerUiState(loading = true, authChecking = false, signedIn = true, email = user.email.orEmpty())
                 ensureProfile(user.id, user.email.orEmpty())
                 loadAccountData(user.id)
-            }.onFailure { uiState = uiState.copy(loading = false, message = it.message ?: "Veriler yüklenemedi") }
+            }.onFailure { uiState = uiState.copy(loading = false, authChecking = false, message = "Veriler yüklenemedi. Lütfen tekrar deneyin.") }
         }
     }
 
@@ -268,7 +269,7 @@ class TrackerViewModel : ViewModel() {
 
     private suspend fun ensureProfile(userId: String, email: String) {
         val client = supabase ?: return
-        val current = client.from("calorie_profiles").select().decodeList<CalorieProfile>().firstOrNull()
+        val current = client.from("calorie_profiles").select { filter { eq("user_id", userId) } }.decodeList<CalorieProfile>().firstOrNull()
         if (current == null) {
             client.from("calorie_profiles").insert(CalorieProfile(userId = userId, email = email, dailyCalorieTarget = 2000))
             uiState = uiState.copy(calorieGoal = 2000)
@@ -466,8 +467,8 @@ class TrackerViewModel : ViewModel() {
         viewModelScope.launch {
             runCatching {
                 val user = client.auth.currentUserOrNull() ?: error("Oturum bulunamadı")
-                val current = client.from("calorie_profiles").select().decodeList<CalorieProfile>().firstOrNull()
-                client.from("calorie_profiles").upsert((current ?: CalorieProfile(userId = user.id, email = user.email)).copy(displayName = "onboarded", dailyCalorieTarget = calories))
+                val current = client.from("calorie_profiles").select { filter { eq("user_id", user.id) } }.decodeList<CalorieProfile>().firstOrNull()
+                client.from("calorie_profiles").upsert((current ?: CalorieProfile(userId = user.id, email = user.email)).copy(displayName = "onboarded", dailyCalorieTarget = calories)) { onConflict = "user_id" }
                 if (weight > 0) client.from("calorie_weight_entries").insert(WeightEntry(userId = user.id, weightKg = weight))
                 loadAll(); uiState = uiState.copy(onboardingCompleted = true, message = "Profilin kaydedildi")
             }.onFailure { uiState = uiState.copy(message = "Profil kaydedilemedi. Lütfen tekrar deneyin.") }
