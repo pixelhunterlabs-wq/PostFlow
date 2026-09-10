@@ -13,7 +13,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -32,11 +31,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
@@ -429,59 +426,21 @@ private fun CanonicalLoginScreen(loading: Boolean, onGoogle: () -> Unit, onPriva
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
-                    0f to Color(0x59000201),
-                    .38f to Color(0xA6030C09),
-                    1f to Color(0xF7030A08)
+                    0f to Color.Transparent,
+                    .58f to Color(0x12000302),
+                    1f to Color(0xD9000705)
                 )
             )
         )
-        BoxWithConstraints(Modifier.fillMaxSize()) {
-            val compact = maxHeight < 700.dp
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = if (compact) 20.dp else 24.dp)
-                    .padding(top = if (compact) 84.dp else 132.dp, bottom = 18.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Surface(
-                    modifier = Modifier.size(if (compact) 72.dp else 84.dp),
-                    shape = RoundedCornerShape(if (compact) 20.dp else 24.dp),
-                    color = Color(0xE60A1713),
-                    border = BorderStroke(1.dp, KaloriGreen.copy(alpha = .28f)),
-                    shadowElevation = 8.dp
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Image(
-                            painter = painterResource(R.drawable.ic_launcher),
-                            contentDescription = "Kalori Takip logosu",
-                            modifier = Modifier.size(if (compact) 54.dp else 62.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Kalori ", style = MaterialTheme.typography.headlineLarge, color = Color.White, fontWeight = FontWeight.Black)
-                    Text("Takip", style = MaterialTheme.typography.headlineLarge, color = KaloriGreen, fontWeight = FontWeight.Black)
-                }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Kalori, makro ve ilerlemeni tek yerde takip et.",
-                    color = Color(0xFFD2D7D5),
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(if (compact) 18.dp else 26.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CanonicalLoginFeature("Kolay\nTakip", Icons.Filled.RestaurantMenu, Modifier.weight(1f), compact)
-                    CanonicalLoginFeature("Detaylı\nRaporlar", Icons.Filled.BarChart, Modifier.weight(1f), compact)
-                    CanonicalLoginFeature("Hedeflerine\nUlaş", Icons.Filled.TrackChanges, Modifier.weight(1f), compact)
-                    CanonicalLoginFeature("Daha Sağlıklı\nYaşam", Icons.Filled.Eco, Modifier.weight(1f), compact)
-                }
-                Spacer(Modifier.height(if (compact) 24.dp else 40.dp))
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Bottom
+        ) {
                 Button(
                     enabled = !loading,
                     onClick = onGoogle,
@@ -520,7 +479,7 @@ private fun CanonicalLoginScreen(loading: Boolean, onGoogle: () -> Unit, onPriva
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center
                 )
-                Spacer(Modifier.height(if (compact) 14.dp else 20.dp))
+                Spacer(Modifier.height(14.dp))
                 Text(
                     "Gizlilik Politikası",
                     color = KaloriGreen,
@@ -528,23 +487,6 @@ private fun CanonicalLoginScreen(loading: Boolean, onGoogle: () -> Unit, onPriva
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onPrivacy).padding(horizontal = 10.dp, vertical = 7.dp)
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CanonicalLoginFeature(label: String, icon: ImageVector, modifier: Modifier = Modifier, compact: Boolean = false) {
-    Surface(
-        modifier = modifier.height(if (compact) 78.dp else 88.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = Color(0xD90A1512),
-        border = BorderStroke(1.dp, Color(0x4D3A6B59))
-    ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Icon(icon, null, tint = KaloriGreen, modifier = Modifier.size(if (compact) 21.dp else 23.dp))
-            Spacer(Modifier.height(5.dp))
-            Text(label, color = Color.White, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
         }
     }
 }
