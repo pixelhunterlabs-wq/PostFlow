@@ -118,6 +118,10 @@
 
         <activity
             android:name=".ModernMainActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".CanonicalMainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
