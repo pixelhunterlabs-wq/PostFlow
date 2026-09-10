@@ -8,12 +8,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 
-val KaloriGreen = Color(0xFF00E676)
-val KaloriGreenSoft = Color(0xFF21F38A)
+val KaloriGreen = Color(0xFF00E884)
+val KaloriGreenSoft = Color(0xFF00F58A)
 val KaloriGreenSecondary = Color(0xFF19E37A)
-val KaloriBackground = Color(0xFF050807)
-val KaloriSurface = Color(0xFF101715)
-val KaloriSurfaceAlt = Color(0xFF121A17)
+val KaloriBackground = Color(0xFF03110E)
+val KaloriSurface = Color(0xFF0D1A17)
+val KaloriSurfaceAlt = Color(0xFF12231E)
 val KaloriBorder = Color(0xFF26312E)
 val KaloriDialog = Color(0xFF1A1B22)
 val KaloriInput = Color(0xFF151821)

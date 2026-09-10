@@ -8,6 +8,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,6 +22,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -157,8 +161,8 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
             TopAppBar(
                 title = {
                     Column {
-                        Text(if (tab == MainTab.HOME) "Bugün" else tab.label, fontWeight = FontWeight.Bold)
-                        if (tab == MainTab.HOME) Text(todayTurkish(), style = MaterialTheme.typography.labelSmall, color = KaloriMuted)
+                        Text(if (tab == MainTab.HOME) "Merhaba 👋" else tab.label, fontWeight = FontWeight.Bold)
+                        if (tab == MainTab.HOME) Text("Bugün harika gidiyorsun • " + todayTurkish(), style = MaterialTheme.typography.labelSmall, color = KaloriMuted)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = KaloriBackground, titleContentColor = KaloriText)
@@ -332,42 +336,68 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
 
 @Composable
 private fun LoginScreen(loading: Boolean, message: String?, onGoogle: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().padding(28.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Surface(shape = RoundedCornerShape(28.dp), color = Color(0xFF0E2A1D)) {
-            Icon(Icons.Filled.LocalFireDepartment, null, tint = KaloriGreen, modifier = Modifier.padding(22.dp).size(52.dp))
-        }
-        Spacer(Modifier.height(24.dp))
-        Text("Kalori Takip", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black)
-        Text("Türkiye odaklı sade kalori ve makro takibi", color = KaloriMuted)
-        Spacer(Modifier.height(28.dp))
-        Button(
-            enabled = !loading,
-            onClick = onGoogle,
-            modifier = Modifier.fillMaxWidth().height(54.dp)
+    Box(Modifier.fillMaxSize()) {
+        Image(
+            painter = painterResource(R.drawable.login_cover_reference),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(Modifier.fillMaxSize().background(Color(0x8803110E)))
+        Column(
+            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 28.dp, vertical = 20.dp),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (loading) {
-                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = Color.Black)
-                Spacer(Modifier.width(8.dp))
-                Text("Google açılıyor…")
-            } else {
-                Text("Google ile devam et")
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Surface(shape = RoundedCornerShape(26.dp), color = Color(0xD90D1A17), border = BorderStroke(1.dp, Color(0x6600E884))) {
+                    Icon(Icons.Filled.LocalFireDepartment, null, tint = KaloriGreen, modifier = Modifier.padding(15.dp).size(38.dp))
+                }
+                Spacer(Modifier.height(14.dp))
+                Text("Kalori", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = KaloriText)
+                Text("Takip", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = KaloriGreen)
+                Spacer(Modifier.height(8.dp))
+                Text("Kalori, makro ve ilerlemeni\ntek yerde takip et.", color = KaloriText, style = MaterialTheme.typography.titleMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
-        }
-        if (loading) {
-            Spacer(Modifier.height(12.dp))
-            Text("Tarayıcıda Google hesabını seçerek devam et.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
-        }
-        message?.let {
-            Spacer(Modifier.height(12.dp))
-            Text(it, color = KaloriDanger, style = MaterialTheme.typography.bodySmall)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LoginFeature("Kolay\nTakip", Icons.Filled.RestaurantMenu, Modifier.weight(1f))
+                    LoginFeature("Detaylı\nRaporlar", Icons.Filled.BarChart, Modifier.weight(1f))
+                    LoginFeature("Hedeflerine\nUlaş", Icons.Filled.TrackChanges, Modifier.weight(1f))
+                    LoginFeature("Sağlıklı\nYaşam", Icons.Filled.Eco, Modifier.weight(1f))
+                }
+                Button(
+                    enabled = !loading,
+                    onClick = onGoogle,
+                    modifier = Modifier.fillMaxWidth().height(58.dp),
+                    shape = RoundedCornerShape(30.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF111111))
+                ) {
+                    Text("G", color = Color(0xFF4285F4), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                    Spacer(Modifier.width(10.dp))
+                    if (loading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = KaloriGreen)
+                    else Text("Google ile devam et", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    Icon(Icons.Filled.ChevronRight, null)
+                }
+                Text("Hesabınla giriş yaparak verilerin cihazlar arasında güvende kalır.", color = KaloriText, style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                Text("Devam ederek Gizlilik Politikası’nı kabul etmiş olursun.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                message?.let { Text(it, color = KaloriDanger, style = MaterialTheme.typography.bodySmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
+            }
         }
     }
 }
 
+@Composable
+private fun LoginFeature(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier.height(96.dp), shape = RoundedCornerShape(18.dp), color = Color(0xD90D1A17), border = BorderStroke(1.dp, Color(0x66324F44))) {
+        Column(Modifier.fillMaxSize().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(icon, null, tint = KaloriGreen, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.height(7.dp))
+            Text(label, color = KaloriText, style = MaterialTheme.typography.labelSmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        }
+    }
+}
 @Composable
 private fun OnboardingScreen(email: String, onComplete: (Int, Double) -> Unit) {
     var gender by remember { mutableStateOf("Kadın") }
