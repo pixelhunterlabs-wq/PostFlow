@@ -12,7 +12,12 @@ data class CatalogFood(
     val calories100g: Double,
     val protein100g: Double,
     val carbs100g: Double,
-    val fat100g: Double
+    val fat100g: Double,
+    val category: String = "Diğer",
+    val aliases: List<String> = emptyList(),
+    val defaultPortionName: String = "100 gram",
+    val defaultPortionGrams: Double = 100.0,
+    val isEstimate: Boolean = false
 )
 
 object TurkishFoodCatalog {
@@ -46,7 +51,13 @@ object TurkishFoodCatalog {
         CatalogFood("Makarna, pişmiş", 131.0, 5.0, 25.0, 1.1),
         CatalogFood("Nohut, pişmiş", 164.0, 8.9, 27.4, 2.6),
         CatalogFood("Kuru fasulye, pişmiş", 127.0, 8.7, 22.8, 0.5),
-        CatalogFood("Cici Bebe bisküvi", 438.0, 7.0, 73.0, 13.0)
+        CatalogFood("Cici Bebe bisküvi", 438.0, 7.0, 73.0, 13.0),
+        CatalogFood("Baklava", 428.0, 5.8, 52.0, 21.0, "Tatlılar", listOf("baklawa"), "1 dilim", 35.0, true),
+        CatalogFood("Sütlaç", 134.0, 3.1, 24.0, 2.8, "Tatlılar", listOf("sutlac"), "1 küçük kase", 180.0, true),
+        CatalogFood("Kazandibi", 155.0, 3.5, 24.0, 5.0, "Tatlılar", listOf("kazan dibi"), "1 porsiyon", 150.0, true),
+        CatalogFood("Çiğ köfte", 179.0, 4.2, 30.0, 4.8, "Ev Yemekleri", listOf("cig kofte", "cigkofte"), "1 porsiyon", 150.0, true),
+        CatalogFood("Kuru fasulye", 127.0, 8.7, 22.8, 0.5, "Ev Yemekleri", listOf("kurufasulye"), "1 porsiyon", 220.0, true),
+        CatalogFood("Tavuk göğsü", 165.0, 31.0, 0.0, 3.6, "Et Tavuk Balık Bakliyat", listOf("tavuk gogsu"), "1 porsiyon", 150.0, false)
     )
 }
 

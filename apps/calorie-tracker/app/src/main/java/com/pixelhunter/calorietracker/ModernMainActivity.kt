@@ -764,9 +764,10 @@ private fun FoodSearchDialog(
     onVoice: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("Tümü") }
     var selected by remember { mutableStateOf<CatalogFood?>(null) }
     var showManual by remember { mutableStateOf(false) }
-    val results = remember(query) { TurkishFoodCatalog.foods.filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }.take(15) }
+    val results = remember(query, category) { FoodCatalogSearch.search(TurkishFoodCatalog.foods, query, category, limit = 30) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -776,7 +777,12 @@ private fun FoodSearchDialog(
         title = { Text("Yemek Ekle") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(query, { query = it }, label = { Text("Yiyecek ara") }, leadingIcon = { Icon(Icons.Filled.Search, null) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(query, { query = it }, label = { Text("Yiyecek ara (ör: baklava, tavuk, sütlaç)") }, leadingIcon = { Icon(Icons.Filled.Search, null) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    listOf("Tümü", "Tatlılar", "Ev Yemekleri", "Kahvaltı").forEach { option ->
+                        FilterChip(selected = category == option, onClick = { category = option }, label = { Text(option, style = MaterialTheme.typography.labelSmall) })
+                    }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(onClick = { query = "" }, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.Search, null); Spacer(Modifier.width(5.dp)); Text("Ara") }
                     FilledTonalButton(onClick = onPhoto, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.PhotoCamera, null); Spacer(Modifier.width(5.dp)); Text("Fotoğraf") }
@@ -816,7 +822,7 @@ private fun FoodSearchDialog(
 @Composable
 private fun FoodResultRow(food: CatalogFood, favorite: Boolean, onFavorite: () -> Unit, onSelect: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { Text(food.name); Text("100 g • ${food.calories100g.toInt()} kcal", color = KaloriMuted, style = MaterialTheme.typography.bodySmall) }
+        Column(Modifier.weight(1f)) { Text(food.name); Text("${food.defaultPortionName} • ${food.calories100g.toInt()} kcal / 100 g" + if (food.isEstimate) " • yaklaşık" else "", color = KaloriMuted, style = MaterialTheme.typography.bodySmall) }
         IconButton(onClick = onFavorite) { Icon(if (favorite) Icons.Filled.Star else Icons.Filled.StarBorder, "Favori", tint = if (favorite) KaloriYellow else KaloriMuted) }
         IconButton(onClick = onSelect) { Icon(Icons.Filled.AddCircle, "Ekle", tint = KaloriGreen) }
     }
@@ -824,7 +830,7 @@ private fun FoodResultRow(food: CatalogFood, favorite: Boolean, onFavorite: () -
 
 @Composable
 private fun CatalogAmountDialog(food: CatalogFood, onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
-    var grams by remember { mutableStateOf("100") }
+    var grams by remember(food.name) { mutableStateOf(food.defaultPortionGrams.toInt().toString()) }
     var meal by remember { mutableStateOf("Öğle") }
     val value = grams.toDoubleOrNull() ?: 0.0
     AlertDialog(
