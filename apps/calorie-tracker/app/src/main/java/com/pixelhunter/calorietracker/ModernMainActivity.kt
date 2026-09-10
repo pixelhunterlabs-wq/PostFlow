@@ -351,7 +351,7 @@ private fun LoginScreen(loading: Boolean, message: String?, onGoogle: () -> Unit
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Surface(shape = RoundedCornerShape(26.dp), color = Color(0xD90D1A17), border = BorderStroke(1.dp, Color(0x6600E884))) {
-                    Icon(Icons.Filled.LocalFireDepartment, null, tint = KaloriGreen, modifier = Modifier.padding(15.dp).size(38.dp))
+                    Image(painter = painterResource(R.drawable.ic_launcher), contentDescription = "Kalori Takip", modifier = Modifier.padding(9.dp).size(50.dp))
                 }
                 Spacer(Modifier.height(14.dp))
                 Text("Kalori", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Black, color = KaloriText)
