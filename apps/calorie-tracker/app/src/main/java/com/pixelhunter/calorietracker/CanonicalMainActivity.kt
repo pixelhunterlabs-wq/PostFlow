@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -31,9 +32,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircle
@@ -96,6 +99,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -221,7 +225,11 @@ private fun CanonicalTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = 
     when {
         !SupabaseProvider.configured -> CanonicalCenterState("Bağlantı ayarları eksik", "Supabase bağlantısı yapılandırılmamış.")
         state.authChecking -> CanonicalCenterState("Oturum açılıyor", "Hesabın kontrol ediliyor.")
-        !state.signedIn -> CanonicalLoginScreen(loading = state.loading, onGoogle = vm::signInWithGoogle)
+        !state.signedIn -> CanonicalLoginScreen(
+            loading = state.loading,
+            onGoogle = vm::signInWithGoogle,
+            onPrivacy = ::openPrivacy
+        )
         !state.onboardingCompleted && state.entries.isEmpty() -> CanonicalOnboardingScreen(state.email, vm::completeOnboarding)
         else -> {
             BackHandler(enabled = page != CanonicalPage.ROOT) {
@@ -410,93 +418,132 @@ private fun CanonicalTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = 
 }
 
 @Composable
-private fun CanonicalLoginScreen(loading: Boolean, onGoogle: () -> Unit) {
+private fun CanonicalLoginScreen(loading: Boolean, onGoogle: () -> Unit, onPrivacy: () -> Unit) {
     Box(Modifier.fillMaxSize().background(KaloriBackground)) {
         Image(
-            painter = painterResource(R.drawable.login_cover_reference),
+            painter = painterResource(R.drawable.login_fitness_background),
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop
         )
-        Box(Modifier.fillMaxSize().background(Color(0x72000504)))
-        Column(
-            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 28.dp, vertical = 22.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(Modifier.weight(0.72f))
-            Surface(
-                modifier = Modifier.size(112.dp),
-                shape = RoundedCornerShape(28.dp),
-                color = Color(0xD80A1D17),
-                border = BorderStroke(1.dp, KaloriGreen.copy(alpha = .35f)),
-                shadowElevation = 10.dp
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    0f to Color(0x59000201),
+                    .38f to Color(0xA6030C09),
+                    1f to Color(0xF7030A08)
+                )
+            )
+        )
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val compact = maxHeight < 700.dp
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = if (compact) 20.dp else 24.dp)
+                    .padding(top = if (compact) 84.dp else 132.dp, bottom = 18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Image(painter = painterResource(R.drawable.ic_launcher), contentDescription = "Kalori Takip", modifier = Modifier.size(72.dp))
+                Surface(
+                    modifier = Modifier.size(if (compact) 72.dp else 84.dp),
+                    shape = RoundedCornerShape(if (compact) 20.dp else 24.dp),
+                    color = Color(0xE60A1713),
+                    border = BorderStroke(1.dp, KaloriGreen.copy(alpha = .28f)),
+                    shadowElevation = 8.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_launcher),
+                            contentDescription = "Kalori Takip logosu",
+                            modifier = Modifier.size(if (compact) 54.dp else 62.dp)
+                        )
+                    }
                 }
+                Spacer(Modifier.height(if (compact) 10.dp else 14.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Kalori ", style = MaterialTheme.typography.headlineLarge, color = Color.White, fontWeight = FontWeight.Black)
+                    Text("Takip", style = MaterialTheme.typography.headlineLarge, color = KaloriGreen, fontWeight = FontWeight.Black)
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Kalori, makro ve ilerlemeni tek yerde takip et.",
+                    color = Color(0xFFD2D7D5),
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(if (compact) 18.dp else 26.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CanonicalLoginFeature("Kolay\nTakip", Icons.Filled.RestaurantMenu, Modifier.weight(1f), compact)
+                    CanonicalLoginFeature("Detaylı\nRaporlar", Icons.Filled.BarChart, Modifier.weight(1f), compact)
+                    CanonicalLoginFeature("Hedeflerine\nUlaş", Icons.Filled.TrackChanges, Modifier.weight(1f), compact)
+                    CanonicalLoginFeature("Daha Sağlıklı\nYaşam", Icons.Filled.Eco, Modifier.weight(1f), compact)
+                }
+                Spacer(Modifier.height(if (compact) 24.dp else 40.dp))
+                Button(
+                    enabled = !loading,
+                    onClick = onGoogle,
+                    modifier = Modifier.fillMaxWidth().height(58.dp),
+                    shape = RoundedCornerShape(29.dp),
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color(0xFF151515),
+                        disabledContainerColor = Color(0xFFE4E7E6),
+                        disabledContentColor = Color(0xFF555957)
+                    )
+                ) {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_google_g),
+                            contentDescription = "Google",
+                            modifier = Modifier.align(Alignment.CenterStart).size(23.dp)
+                        )
+                        if (loading) {
+                            CircularProgressIndicator(Modifier.size(21.dp), strokeWidth = 2.dp, color = KaloriGreen)
+                        } else {
+                            Text("Google ile devam et", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                        Icon(
+                            Icons.Filled.ChevronRight,
+                            contentDescription = null,
+                            modifier = Modifier.align(Alignment.CenterEnd).size(22.dp)
+                        )
+                    }
+                }
+                Spacer(Modifier.height(13.dp))
+                Text(
+                    "Hesabınla giriş yaparak verilerin cihazlar arasında güvende kalır.",
+                    color = Color(0xFFB8C0BD),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(if (compact) 14.dp else 20.dp))
+                Text(
+                    "Gizlilik Politikası",
+                    color = KaloriGreen,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onPrivacy).padding(horizontal = 10.dp, vertical = 7.dp)
+                )
             }
-            Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Kalori ", style = MaterialTheme.typography.displaySmall, color = Color.White, fontWeight = FontWeight.Black)
-                Text("Takip", style = MaterialTheme.typography.displaySmall, color = KaloriGreen, fontWeight = FontWeight.Black)
-            }
-            Text(
-                "Kalori, makro ve ilerlemeni\ntek yerde takip et.",
-                color = Color(0xFFD2D7D5),
-                style = MaterialTheme.typography.titleMedium,
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(26.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                CanonicalLoginFeature("Kolay\nTakip", Icons.Filled.RestaurantMenu, Modifier.weight(1f))
-                CanonicalLoginFeature("Detaylı\nRaporlar", Icons.Filled.BarChart, Modifier.weight(1f))
-                CanonicalLoginFeature("Hedeflerine\nUlaş", Icons.Filled.TrackChanges, Modifier.weight(1f))
-                CanonicalLoginFeature("Daha Sağlıklı\nYaşam", Icons.Filled.Eco, Modifier.weight(1f))
-            }
-            Spacer(Modifier.weight(1f))
-            Button(
-                enabled = !loading,
-                onClick = onGoogle,
-                modifier = Modifier.fillMaxWidth().height(64.dp),
-                shape = RoundedCornerShape(34.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color(0xFF111111))
-            ) {
-                Text("G", color = Color(0xFF4285F4), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-                Spacer(Modifier.width(12.dp))
-                if (loading) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = KaloriGreen)
-                else Text("Google ile devam et", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.weight(1f))
-                Icon(Icons.Filled.ChevronRight, null)
-            }
-            Spacer(Modifier.height(16.dp))
-            Text(
-                "Hesabınla giriş yaparak verilerin cihazlar arasında güvende kalır.",
-                color = Color(0xFFB8C0BD),
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center
-            )
-            Spacer(Modifier.height(18.dp))
-            Text(
-                "Devam ederek Gizlilik Politikası’nı kabul etmiş olursun.",
-                color = Color(0xFFA5ADAA),
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center
-            )
         }
     }
 }
 
 @Composable
-private fun CanonicalLoginFeature(label: String, icon: ImageVector, modifier: Modifier = Modifier) {
+private fun CanonicalLoginFeature(label: String, icon: ImageVector, modifier: Modifier = Modifier, compact: Boolean = false) {
     Surface(
-        modifier = modifier.height(96.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = Color(0xCC0B1714),
-        border = BorderStroke(1.dp, Color(0x55386B58))
+        modifier = modifier.height(if (compact) 78.dp else 88.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xD90A1512),
+        border = BorderStroke(1.dp, Color(0x4D3A6B59))
     ) {
-        Column(Modifier.fillMaxSize().padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Icon(icon, null, tint = KaloriGreen, modifier = Modifier.size(25.dp))
-            Spacer(Modifier.height(7.dp))
+        Column(Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 7.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Icon(icon, null, tint = KaloriGreen, modifier = Modifier.size(if (compact) 21.dp else 23.dp))
+            Spacer(Modifier.height(5.dp))
             Text(label, color = Color.White, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
         }
     }
