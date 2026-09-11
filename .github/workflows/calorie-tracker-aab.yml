@@ -1,0 +1,75 @@
+name: Calorie Tracker AAB
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/calorie-tracker-v1
+    paths:
+      - 'apps/calorie-tracker/**'
+      - '.github/workflows/calorie-tracker-aab.yml'
+  pull_request:
+    paths:
+      - 'apps/calorie-tracker/**'
+      - '.github/workflows/calorie-tracker-aab.yml'
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 37 preview
+        run: sdkmanager --channel=3 'platforms;android-37.0' 'build-tools;37.0.0'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+
+      - name: Create CI local.properties
+        working-directory: apps/calorie-tracker
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "SUPABASE_URL=https://jecbdzkunqwgpzbiwdak.supabase.co" >> local.properties
+          echo "SUPABASE_KEY=sb_publishable_LggEu5U2E1Wg-lp1b2ih3g_tNpSfrIG" >> local.properties
+
+      - name: Configure optional Play upload signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.CALORIE_UPLOAD_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.CALORIE_UPLOAD_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.CALORIE_UPLOAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.CALORIE_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            KEYSTORE_PATH="$RUNNER_TEMP/calorie-upload-keystore.jks"
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+            echo "CALORIE_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+            echo "CALORIE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "CALORIE_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "CALORIE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo "CALORIE_SIGNING_CONFIGURED=true" >> "$GITHUB_ENV"
+          else
+            echo "CALORIE_SIGNING_CONFIGURED=false" >> "$GITHUB_ENV"
+            echo "Upload signing secrets are not configured; building an unsigned release candidate."
+          fi
+
+      - name: Build release AAB
+        run: gradle -p apps/calorie-tracker bundleRelease --stacktrace
+
+      - name: Verify signed AAB
+        if: env.CALORIE_SIGNING_CONFIGURED == 'true'
+        run: jarsigner -verify -verbose -certs apps/calorie-tracker/app/build/outputs/bundle/release/app-release.aab
+
+      - name: Upload release candidate AAB
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: calorie-tracker-release-aab
+          path: apps/calorie-tracker/app/build/outputs/bundle/release/app-release.aab
