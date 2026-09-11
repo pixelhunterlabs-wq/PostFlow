@@ -31,12 +31,16 @@ import io.github.jan.supabase.functions.Functions
 import io.github.jan.supabase.functions.functions
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
@@ -109,6 +113,21 @@ data class WeightEntry(
     @SerialName("fat_g") val fatG: Double
 )
 
+@Serializable
+data class CatalogRemoteFood(
+    val id: String,
+    @SerialName("name_tr") val name: String,
+    val category: String,
+    @SerialName("calories_100g") val calories100g: Double,
+    @SerialName("protein_100g") val protein100g: Double,
+    @SerialName("carbs_100g") val carbs100g: Double,
+    @SerialName("fat_100g") val fat100g: Double,
+    val aliases: List<String> = emptyList(),
+    val verified: Boolean = false,
+    val source: String = "catalog"
+) {
+    fun catalogFood() = CatalogFood(name, calories100g, protein100g, carbs100g, fat100g, category, aliases, isEstimate = !verified)
+}
 data class BarcodeProduct(
     val barcode: String,
     val name: String,
@@ -150,6 +169,7 @@ data class TrackerUiState(
     val waterMl: Int = 0,
     val favorites: List<FavoriteFood> = emptyList(),
     val savedMeals: List<SavedMealRemote> = emptyList(),
+    val remoteCatalogFoods: List<CatalogFood> = emptyList(),
     val editingSavedMealItems: List<SavedMealItemRemote> = emptyList(),
     val barcodeLoading: Boolean = false,
     val barcodeProduct: BarcodeProduct? = null,
@@ -283,6 +303,31 @@ class TrackerViewModel : ViewModel() {
         uiState = uiState.copy(entries = entries, weights = weights, loading = false)
     }
 
+    fun searchFoodCatalog(query: String) {
+        val client = supabase ?: return
+        val normalized = FoodCatalogSearch.normalize(query)
+        if (normalized.length < 2) {
+            uiState = uiState.copy(remoteCatalogFoods = emptyList())
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                client.postgrest.rpc(
+                    "search_calorie_foods",
+                    buildJsonObject {
+                        put("search_query", normalized)
+                        put("page_size", 30)
+                        put("page_offset", 0)
+                    }
+                ).decodeList<CatalogRemoteFood>().map { it.catalogFood() }
+            }.onSuccess { foods ->
+                uiState = uiState.copy(remoteCatalogFoods = foods)
+            }.onFailure {
+                // The local Turkish fallback keeps food entry usable offline or before migration rollout.
+                uiState = uiState.copy(remoteCatalogFoods = emptyList())
+            }
+        }
+    }
     fun lookupBarcode(barcode: String) {
         val clean = BarcodeSupport.normalize(barcode)
         if (clean == null) {

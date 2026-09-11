@@ -238,6 +238,8 @@ fun ModernTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()
         FoodSearchDialog(
             favorites = state.favorites.map { it.catalogFood() },
             recent = state.recentFoods,
+            remoteCatalogFoods = state.remoteCatalogFoods,
+            onSearchCatalog = vm::searchFoodCatalog,
             onDismiss = { showFoodSearch = false },
             onToggleFavorite = vm::toggleFavorite,
             onAddCatalog = { food, meal, grams ->
@@ -754,6 +756,8 @@ private fun ProfileScreen(
 private fun FoodSearchDialog(
     favorites: List<CatalogFood>,
     recent: List<CalorieEntry>,
+    remoteCatalogFoods: List<CatalogFood>,
+    onSearchCatalog: (String) -> Unit,
     onDismiss: () -> Unit,
     onToggleFavorite: (CatalogFood) -> Unit,
     onAddCatalog: (CatalogFood, String, Double) -> Unit,
@@ -767,7 +771,14 @@ private fun FoodSearchDialog(
     var category by remember { mutableStateOf("Tümü") }
     var selected by remember { mutableStateOf<CatalogFood?>(null) }
     var showManual by remember { mutableStateOf(false) }
-    val results = remember(query, category) { FoodCatalogSearch.search(TurkishFoodCatalog.foods, query, category, limit = 30) }
+    LaunchedEffect(query) {
+        delay(300)
+        onSearchCatalog(query)
+    }
+    val results = remember(query, category, remoteCatalogFoods) {
+        val source = if (remoteCatalogFoods.isNotEmpty()) remoteCatalogFoods + TurkishFoodCatalog.foods else TurkishFoodCatalog.foods
+        FoodCatalogSearch.search(source.distinctBy { it.name.lowercase(Locale.forLanguageTag("tr-TR")) }, query, category, limit = 30)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
