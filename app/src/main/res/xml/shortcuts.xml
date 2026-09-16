@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="voice_log"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/voice_shortcut_short"
+        android:shortcutLongLabel="@string/voice_shortcut_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.pixelhunter.calorietracker"
+            android:targetClass="com.pixelhunter.calorietracker.VoiceLogActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="recipe_builder"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/recipe_shortcut_short"
+        android:shortcutLongLabel="@string/recipe_shortcut_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.pixelhunter.calorietracker"
+            android:targetClass="com.pixelhunter.calorietracker.RecipeBuilderActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="wellness_hub"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/wellness_shortcut_short"
+        android:shortcutLongLabel="@string/wellness_shortcut_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.pixelhunter.calorietracker"
+            android:targetClass="com.pixelhunter.calorietracker.WellnessHubActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="privacy_policy"
+        android:enabled="true"
+        android:icon="@drawable/ic_launcher"
+        android:shortcutShortLabel="@string/privacy_shortcut_short"
+        android:shortcutLongLabel="@string/privacy_shortcut_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.pixelhunter.calorietracker"
+            android:targetClass="com.pixelhunter.calorietracker.PrivacyPolicyActivity" />
+    </shortcut>
+</shortcuts>

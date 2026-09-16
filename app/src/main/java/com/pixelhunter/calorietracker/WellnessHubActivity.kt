@@ -1,0 +1,439 @@
+package com.pixelhunter.calorietracker
+
+import android.Manifest
+import android.content.Intent
+import android.app.TimePickerDialog
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.PermissionController
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+class WellnessHubActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent { KaloriDarkTheme { WellnessHubScreen() } }
+    }
+}
+
+@Composable
+private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
+    val context = LocalContext.current
+    val state = vm.uiState
+    val health = remember(context) { HealthConnectBridge(context) }
+    val store = remember(context) { AdvancedWellnessStore(context) }
+    val scope = rememberCoroutineScope()
+
+    var steps by remember { mutableLongStateOf(0L) }
+    var healthGranted by remember { mutableStateOf(false) }
+    var reminders by remember { mutableStateOf(store.remindersEnabled()) }
+    var weeklyTarget by remember { mutableDoubleStateOf(store.targetWeeklyLossKg()) }
+    var editingSavedMeal by remember { mutableStateOf<SavedMealRemote?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    val healthPermissionLauncher = rememberLauncherForActivityResult(
+        contract = PermissionController.createRequestPermissionResultContract()
+    ) { granted ->
+        healthGranted = granted.containsAll(HealthConnectBridge.stepPermissions)
+        if (healthGranted) {
+            scope.launch { steps = health.todaySteps() }
+        } else message = "Adım izni verilmedi"
+    }
+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            store.setRemindersEnabled(true)
+            reminders = true
+            MealReminderScheduler.enable(context)
+            message = "Öğün hatırlatmaları açıldı"
+        } else {
+            reminders = false
+            store.setRemindersEnabled(false)
+            message = "Bildirim izni verilmedi"
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (health.available) {
+            healthGranted = health.hasStepPermission()
+            if (healthGranted) steps = health.todaySteps()
+        }
+    }
+
+    val suggestion = remember(state.weights, state.calorieGoal, weeklyTarget) {
+        dynamicGoalSuggestion(state.calorieGoal, state.weights, weeklyTarget)
+    }
+
+    Scaffold(
+        containerColor = KaloriBackground,
+        topBar = {
+            TopAppBar(
+                title = { Text("Sağlık & Akıllı Takip", fontWeight = FontWeight.Bold) },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = KaloriBackground, titleContentColor = KaloriText)
+            )
+        },
+        snackbarHost = {
+            val host = remember { SnackbarHostState() }
+            LaunchedEffect(message) {
+                message?.let { host.showSnackbar(it); message = null }
+            }
+            SnackbarHost(host)
+        }
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 40.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Text("Hızlı araçlar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ToolCard(
+                        icon = Icons.Filled.Mic,
+                        title = "Sesle Ekle",
+                        subtitle = "Yemeğini söyle",
+                        modifier = Modifier.weight(1f)
+                    ) { context.startActivity(Intent(context, VoiceLogActivity::class.java)) }
+                    ToolCard(
+                        icon = Icons.Filled.RestaurantMenu,
+                        title = "Tarif Oluştur",
+                        subtitle = "Öğününü kaydet",
+                        modifier = Modifier.weight(1f)
+                    ) { context.startActivity(Intent(context, RecipeBuilderActivity::class.java)) }
+                }
+            }
+
+            item {
+                ToolCard(
+                    icon = Icons.Filled.PhotoCamera,
+                    title = "Fotoğraftan AI Analiz",
+                    subtitle = "Fotoğraftan yiyecek, porsiyon ve makro tahmini",
+                    modifier = Modifier.fillMaxWidth(),
+                    emphasized = true
+                ) { context.startActivity(Intent(context, PhotoMealAnalysisActivity::class.java)) }
+            }
+
+            item {
+                HubCard {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.DirectionsWalk, null, tint = KaloriGreen, modifier = Modifier.size(34.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Health Connect", fontWeight = FontWeight.Bold)
+                            when {
+                                !health.available -> Text(
+                                    if (health.sdkStatus == HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED) "Health Connect güncellemesi gerekiyor" else "Bu cihazda Health Connect kullanılamıyor",
+                                    color = KaloriMuted
+                                )
+                                healthGranted -> Text("Bugün $steps adım", color = KaloriGreen, style = MaterialTheme.typography.titleMedium)
+                                else -> Text("Adım verisini bağla", color = KaloriMuted)
+                            }
+                        }
+                        if (health.available) {
+                            Button(onClick = {
+                                if (healthGranted) scope.launch { steps = health.todaySteps() }
+                                else healthPermissionLauncher.launch(HealthConnectBridge.stepPermissions)
+                            }) { Text(if (healthGranted) "Yenile" else "Bağla") }
+                        }
+                    }
+                }
+            }
+
+            item { ReminderSettings(store) { MealReminderScheduler.enable(context) } }
+
+            item {
+                HubCard {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.NotificationsActive, null, tint = KaloriYellow)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Öğün hatırlatmaları", fontWeight = FontWeight.Bold)
+                            Text("08:00 • 13:00 • 19:00", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(checked = reminders, onCheckedChange = { enabled ->
+                            if (!enabled) {
+                                store.setRemindersEnabled(false)
+                                reminders = false
+                                MealReminderScheduler.disable(context)
+                            } else if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                store.setRemindersEnabled(true)
+                                reminders = true
+                                MealReminderScheduler.enable(context)
+                            }
+                        })
+                    }
+                }
+            }
+
+            item {
+                HubCard {
+                    Text("Dinamik kalori hedefi", fontWeight = FontWeight.Bold)
+                    Text("Kilo trendine göre haftalık kalori hedefi önerir; sen onaylamadan değiştirmez.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(0.0, 0.25, 0.5, 0.75).forEach { value ->
+                            FilterChip(
+                                selected = weeklyTarget == value,
+                                onClick = { weeklyTarget = value; store.setTargetWeeklyLossKg(value) },
+                                label = { Text(if (value == 0.0) "Koru" else "−$value kg") }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    if (suggestion == null) {
+                        Text("Öneri için en az iki farklı tarihte kilo kaydı gerekli.", color = KaloriMuted)
+                    } else {
+                        Text("Gözlenen haftalık değişim: ${"%.2f".format(suggestion.observedWeeklyChangeKg)} kg", color = KaloriMuted)
+                        Text("Mevcut: ${suggestion.currentGoal} kcal  →  Öneri: ${suggestion.suggestedGoal} kcal", color = KaloriGreen, fontWeight = FontWeight.Bold)
+                        if (suggestion.suggestedGoal != suggestion.currentGoal) {
+                            Button(onClick = { vm.updateGoal(suggestion.suggestedGoal); message = "Yeni kalori hedefi uygulandı" }) { Text("Öneriyi uygula") }
+                        } else {
+                            Text("Mevcut hedef kilo trendinle uyumlu.", color = KaloriGreen)
+                        }
+                    }
+                }
+            }
+
+            item {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Kayıtlı öğünler", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("Sık yediğin öğünleri tek dokunuşla günlüğe ekle", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+                    }
+                    FilledTonalButton(onClick = { context.startActivity(Intent(context, RecipeBuilderActivity::class.java)) }) {
+                        Icon(Icons.Filled.Add, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("Kaydet")
+                    }
+                }
+            }
+
+            if (state.savedMeals.isEmpty()) {
+                item { HubCard { Text("Henüz kayıtlı öğün yok.", color = KaloriMuted) } }
+            } else {
+                items(state.savedMeals, key = { it.id }) { meal ->
+                    HubCard {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(meal.name, fontWeight = FontWeight.Bold)
+                                Text("${meal.calories.toInt()} kcal • P ${meal.proteinG.toInt()} • K ${meal.carbsG.toInt()} • Y ${meal.fatG.toInt()}", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+                            }
+                            IconButton(onClick = { editingSavedMeal = meal; vm.loadSavedMealItems(meal.id) }) {
+                                Icon(Icons.Filled.Edit, "Düzenle", tint = KaloriGreen)
+                            }
+                            IconButton(onClick = { vm.deleteSavedMeal(meal.id) }) {
+                                Icon(Icons.Filled.DeleteOutline, "Sil", tint = KaloriDanger)
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("Kahvaltı", "Öğle", "Akşam", "Atıştırmalık").forEach { mealType ->
+                                AssistChip(
+                                    onClick = {
+                                        vm.addSavedMealToDiary(meal.id, mealType)
+                                    },
+                                    label = { Text(mealType) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                OutlinedButton(
+                    onClick = { context.startActivity(Intent(context, PrivacyPolicyActivity::class.java)) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.PrivacyTip, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Sağlık verileri ve gizlilik")
+                }
+            }
+        }
+    }
+
+    editingSavedMeal?.let { meal ->
+        SavedMealEditDialog(
+            meal = meal,
+            initialItems = state.editingSavedMealItems,
+            onDismiss = { editingSavedMeal = null },
+            onSave = { name, items -> vm.updateSavedMeal(meal, name, items); editingSavedMeal = null }
+        )
+    }
+}
+
+@Composable
+private fun ToolCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    emphasized: Boolean = false,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = if (emphasized) Color(0xFF0E2A1D) else KaloriSurface),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = RoundedCornerShape(14.dp), color = Color(0xFF173729)) {
+                Icon(icon, null, tint = KaloriGreen, modifier = Modifier.padding(10.dp).size(24.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.Bold)
+                Text(subtitle, color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+            }
+            Icon(Icons.Filled.ChevronRight, null, tint = KaloriMuted)
+        }
+    }
+
+}
+
+@Composable
+private fun ReminderSettings(store: AdvancedWellnessStore, onChanged: () -> Unit) {
+    val context = LocalContext.current
+    val items = listOf("breakfast" to "Kahvaltı", "lunch" to "Öğle", "dinner" to "Akşam", "snack" to "Atıştırmalık")
+    HubCard {
+        Text("Öğün hatırlatmaları", fontWeight = FontWeight.Bold)
+        Text("Her öğün için saati seçebilir veya hatırlatmayı kapatabilirsin.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+        items.forEachIndexed { index, (key, label) ->
+            var enabled by remember { mutableStateOf(store.reminderEnabled(key)) }
+            var hour by remember { mutableIntStateOf(store.reminderHour(key, listOf(8, 13, 19, 16)[index])) }
+            var minute by remember { mutableIntStateOf(store.reminderMinute(key)) }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { Text(label, fontWeight = FontWeight.SemiBold); Text(String.format("%02d:%02d", hour, minute), color = KaloriGreen) }
+                TextButton(onClick = { TimePickerDialog(context, { _, h, m -> hour = h; minute = m; store.saveReminder(key, enabled, h, m); onChanged() }, hour, minute, true).show() }) { Text("Saat") }
+                Switch(checked = enabled, onCheckedChange = { enabled = it; store.saveReminder(key, it, hour, minute); onChanged() })
+            }
+        }
+    }
+}
+
+@Composable
+private fun SavedMealEditDialog(meal: SavedMealRemote, initialItems: List<SavedMealItemRemote>, onDismiss: () -> Unit, onSave: (String, List<SavedMealItemRemote>) -> Unit) {
+    var name by remember(meal.id) { mutableStateOf(meal.name) }
+    var items by remember(meal.id, initialItems) { mutableStateOf(initialItems) }
+    AlertDialog(
+        onDismissRequest = onDismiss, containerColor = KaloriDialog, titleContentColor = KaloriText, textContentColor = KaloriMuted,
+        title = { Text("Kayıtlı öğünü düzenle", fontWeight = FontWeight.Bold) },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { OutlinedTextField(name, { name = it }, label = { Text("Öğün adı") }, singleLine = true, modifier = Modifier.fillMaxWidth()) }
+                items(items, key = { it.foodName + it.grams }) { item ->
+                    Column {
+                        OutlinedTextField(item.foodName, { value -> items = items.map { if (it === item) it.copy(foodName = value) else it } }, label = { Text("Yemek adı") }, modifier = Modifier.fillMaxWidth())
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("g" to item.grams, "kcal" to item.calories, "P" to item.proteinG, "K" to item.carbsG, "Y" to item.fatG).forEach { (label, value) ->
+                                OutlinedTextField(value.toString(), { input -> input.toDoubleOrNull()?.let { n -> items = items.map { current -> if (current === item) when (label) { "g" -> current.copy(grams=n); "kcal" -> current.copy(calories=n); "P" -> current.copy(proteinG=n); "K" -> current.copy(carbsG=n); else -> current.copy(fatG=n) } else current } } }, label = { Text(label) }, modifier = Modifier.weight(1f), singleLine = true)
+                            }
+                        }
+                        TextButton(onClick = { items = items.filterNot { it === item } }) { Text("Item sil", color = KaloriDanger) }
+                    }
+                }
+                item { TextButton(onClick = { items = items + SavedMealItemRemote(meal.id, meal.userId, "Yeni yiyecek", 100.0, 0.0, 0.0, 0.0, 0.0) }) { Text("+ Item ekle", color = KaloriGreen) } }
+            }
+        },
+        confirmButton = { Button(enabled = name.isNotBlank() && items.isNotEmpty() && items.all(::isValidSavedMealItem), onClick = { onSave(name, items) }, colors = ButtonDefaults.buttonColors(containerColor = KaloriGreen, contentColor = Color.Black)) { Text("Kaydet") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Vazgeç", color = KaloriMuted) } }
+    )
+}
+
+@Composable
+private fun HubCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = KaloriSurface),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp), content = content)
+    }
+}
+
+@Composable
+private fun SavedMealDialog(onDismiss: () -> Unit, onSave: (SavedMeal) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var grams by remember { mutableStateOf("100") }
+    var calories by remember { mutableStateOf("") }
+    var protein by remember { mutableStateOf("") }
+    var carbs by remember { mutableStateOf("") }
+    var fat by remember { mutableStateOf("") }
+
+    fun valid() = name.isNotBlank() && (grams.toDoubleOrNull() ?: 0.0) > 0 && (calories.toDoubleOrNull() ?: -1.0) >= 0
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Öğün kaydet") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Öğün adı") }, singleLine = true)
+                NumericHubField("Toplam gram", grams) { grams = it }
+                NumericHubField("Kalori", calories) { calories = it }
+                NumericHubField("Protein (g)", protein) { protein = it }
+                NumericHubField("Karbonhidrat (g)", carbs) { carbs = it }
+                NumericHubField("Yağ (g)", fat) { fat = it }
+            }
+        },
+        confirmButton = {
+            Button(enabled = valid(), onClick = {
+                onSave(
+                    SavedMeal(
+                        id = UUID.randomUUID().toString(),
+                        name = name.trim(),
+                        grams = grams.toDoubleOrNull() ?: 100.0,
+                        calories = calories.toDoubleOrNull() ?: 0.0,
+                        proteinG = protein.toDoubleOrNull() ?: 0.0,
+                        carbsG = carbs.toDoubleOrNull() ?: 0.0,
+                        fatG = fat.toDoubleOrNull() ?: 0.0
+                    )
+                )
+            }) { Text("Kaydet") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } }
+    )
+}
+
+@Composable
+private fun NumericHubField(label: String, value: String, onValue: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { onValue(it.filter { c -> c.isDigit() || c == '.' || c == ',' }.replace(',', '.')) },
+        label = { Text(label) },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        singleLine = true
+    )
+}
