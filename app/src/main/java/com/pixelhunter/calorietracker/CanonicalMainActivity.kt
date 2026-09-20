@@ -2,6 +2,9 @@ package com.pixelhunter.calorietracker
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -135,7 +138,8 @@ class CanonicalMainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, window.decorView).hide(WindowInsetsCompat.Type.statusBars())
         SupabaseProvider.client?.handleDeeplinks(intent)
         if (intent?.data?.scheme == "calorietracker" && intent.data?.host == "login") authCallbackTick++
         setContent {
@@ -417,77 +421,79 @@ private fun CanonicalTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = 
 
 @Composable
 private fun CanonicalLoginScreen(loading: Boolean, onGoogle: () -> Unit, onPrivacy: () -> Unit) {
-    Box(Modifier.fillMaxSize().background(KaloriBackground)) {
-        Image(
-            painter = painterResource(R.drawable.login_fitness_background),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    0f to Color.Transparent,
-                    .58f to Color(0x12000302),
-                    1f to Color(0xD9000705)
-                )
-            )
-        )
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(listOf(Color(0xFF101C18), KaloriBackground)))
+    ) {
         Column(
             Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 18.dp),
+                .padding(horizontal = 28.dp, vertical = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Bottom
+            verticalArrangement = Arrangement.Center
         ) {
-                Button(
-                    enabled = !loading,
-                    onClick = onGoogle,
-                    modifier = Modifier.fillMaxWidth().height(58.dp),
-                    shape = RoundedCornerShape(29.dp),
-                    contentPadding = PaddingValues(horizontal = 20.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White,
-                        contentColor = Color(0xFF151515),
-                        disabledContainerColor = Color(0xFFE4E7E6),
-                        disabledContentColor = Color(0xFF555957)
-                    )
+            Text(
+                "Calero",
+                color = KaloriText,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Black
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Beslenmeni kolayca takip et.",
+                color = KaloriMuted,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(32.dp))
+            Button(
+                enabled = !loading,
+                onClick = onGoogle,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                shape = RoundedCornerShape(14.dp),
+                contentPadding = PaddingValues(horizontal = 18.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.White,
+                    contentColor = Color(0xFF151515),
+                    disabledContainerColor = Color(0xFFE4E7E6),
+                    disabledContentColor = Color(0xFF555957)
+                )
+            ) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Image(
-                            painter = painterResource(R.drawable.ic_google_g),
-                            contentDescription = "Google",
-                            modifier = Modifier.align(Alignment.CenterStart).size(23.dp)
+                    Image(
+                        painter = painterResource(R.drawable.ic_google_g),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    if (loading) {
+                        CircularProgressIndicator(
+                            Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = KaloriGreen
                         )
-                        if (loading) {
-                            CircularProgressIndicator(Modifier.size(21.dp), strokeWidth = 2.dp, color = KaloriGreen)
-                        } else {
-                            Text("Google ile devam et", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        }
-                        Icon(
-                            Icons.Filled.ChevronRight,
-                            contentDescription = null,
-                            modifier = Modifier.align(Alignment.CenterEnd).size(22.dp)
-                        )
+                    } else {
+                        Text("Google ile devam et", fontWeight = FontWeight.SemiBold)
                     }
                 }
-                Spacer(Modifier.height(13.dp))
-                Text(
-                    "Hesabınla giriş yaparak verilerin cihazlar arasında güvende kalır.",
-                    color = Color(0xFFB8C0BD),
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center
-                )
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    "Gizlilik Politikası",
-                    color = KaloriGreen,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onPrivacy).padding(horizontal = 10.dp, vertical = 7.dp)
-                )
+            }
+            Spacer(Modifier.height(20.dp))
+            Text(
+                "Gizlilik Politikası",
+                color = KaloriGreen,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onPrivacy)
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
+            )
         }
     }
 }
