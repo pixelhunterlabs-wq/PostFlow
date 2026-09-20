@@ -22,9 +22,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-
-      - uses: android-actions/setup-android@v3
-
+      - name: Prepare Android SDK
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
       - name: Install Android SDK 37 preview
         run: sdkmanager --channel=3 'platforms;android-37.0' 'build-tools;37.0.0'
 
@@ -36,8 +36,8 @@ jobs:
         working-directory: apps/calorie-tracker
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          echo "SUPABASE_URL=https://jecbdzkunqwgpzbiwdak.supabase.co" >> local.properties
-          echo "SUPABASE_KEY=sb_publishable_LggEu5U2E1Wg-lp1b2ih3g_tNpSfrIG" >> local.properties
+          echo "SUPABASE_URL=https://lyjkoypfoopspbeofpvt.supabase.co" >> local.properties
+          echo "SUPABASE_KEY=sb_publishable_OnSKYpPx7JYWigaxdk73yA_mdx0QiWN" >> local.properties
 
       - name: Run unit tests
         run: gradle -p apps/calorie-tracker testDebugUnitTest --stacktrace
