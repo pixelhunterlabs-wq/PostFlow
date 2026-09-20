@@ -310,7 +310,8 @@ private fun CanonicalTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = 
                             onVoice = ::openVoice,
                             onManual = { showManualFood = true },
                             onRepeat = vm::addRecentFood,
-                            onAddSavedMeal = { meal -> vm.addSavedMealToDiary(meal.id, "Öğün") }
+                            onAddSavedMeal = { meal -> vm.addSavedMealToDiary(meal.id, "Öğün") },
+                            onSearchCatalog = vm::searchFoodCatalog
                         )
                         CanonicalPage.BARCODE -> CanonicalBarcodeScreen(
                             state = state,
@@ -755,18 +756,38 @@ private fun CanonicalFoodAddScreen(
     onVoice: () -> Unit,
     onManual: () -> Unit,
     onRepeat: (CalorieEntry) -> Unit,
-    onAddSavedMeal: (SavedMealRemote) -> Unit
+    onAddSavedMeal: (SavedMealRemote) -> Unit,
+    onSearchCatalog: (String) -> Unit
 ) {
     var mode by remember { mutableStateOf(FoodAddMode.SEARCH) }
     var query by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("Tümü") }
     val favorites = state.favorites.map { it.catalogFood() }
-    val results = TurkishFoodCatalog.foods.filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }.take(18)
+    val categories = listOf("Tümü", "Kahvaltı", "Ana Yemekler", "Et/Tavuk/Balık", "Sebzeler", "Meyveler", "Kuruyemişler", "Bakliyatlar", "Tahıllar", "Süt Ürünleri", "İçecekler", "Tatlılar", "Çorbalar", "Hamur İşleri", "Fast Food", "Atıştırmalıklar", "Soslar")
+    LaunchedEffect(query) {
+        kotlinx.coroutines.delay(250)
+        if (query.trim().length >= 2) onSearchCatalog(query.trim())
+    }
+    val localResults = FoodCatalogSearch.search(TurkishFoodCatalog.foods, query, category, 30)
+    val remoteResults = FoodCatalogSearch.search(state.remoteCatalogFoods, query, category, 30)
+    val results = (remoteResults + localResults).distinctBy { it.name.lowercase(Locale.forLanguageTag("tr-TR")) }.take(30)
 
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                items(categories) { item ->
+                    FilterChip(
+                        selected = category == item,
+                        onClick = { category = item },
+                        label = { Text(item, maxLines = 1) }
+                    )
+                }
+            }
+        }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FoodAddMode.entries.forEach { item ->
