@@ -43,8 +43,8 @@ jobs:
         working-directory: apps/calorie-tracker
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          echo "SUPABASE_URL=https://lyjkoypfoopspbeofpvt.supabase.co" >> local.properties
-          echo "SUPABASE_KEY=sb_publishable_OnSKYpPx7JYWigaxdk73yA_mdx0QiWN" >> local.properties
+          echo "SUPABASE_URL=https://jecbdzkunqwgpzbiwdak.supabase.co" >> local.properties
+          echo "SUPABASE_KEY=sb_publishable_LggEu5U2E1Wg-lp1b2ih3g_tNpSfrIG" >> local.properties
 
       - name: Configure optional Play upload signing
         env:
