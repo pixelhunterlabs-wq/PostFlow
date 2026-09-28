@@ -34,6 +34,7 @@ import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -226,23 +227,38 @@ class TrackerViewModel : ViewModel() {
     fun showMessage(message: String) { uiState = uiState.copy(message = message) }
     fun clearBarcodeProduct() { uiState = uiState.copy(barcodeProduct = null) }
 
-    fun refreshSessionAndData() {
+    fun refreshSessionAndData(waitForOAuthCallback: Boolean = false) {
         val client = supabase ?: run {
             uiState = uiState.copy(message = "Supabase ayarları eksik. local.properties dosyasını doldurun.")
             return
         }
         viewModelScope.launch {
             runCatching {
-                val user = client.auth.currentUserOrNull()
-                if (user == null) {
-                    uiState = uiState.copy(signedIn = false, loading = false, authChecking = false)
+                var user = client.auth.currentUserOrNull()
+                if (user == null && waitForOAuthCallback) {
+                    uiState = uiState.copy(loading = true, authChecking = true, message = null)
+                    repeat(24) {
+                        delay(250)
+                        user = client.auth.currentUserOrNull()
+                        if (user != null) return@repeat
+                    }
+                }
+                val signedInUser = user
+                if (signedInUser == null) {
+                    uiState = uiState.copy(
+                        signedIn = false,
+                        loading = false,
+                        authChecking = false,
+                        message = if (waitForOAuthCallback) "Google oturumu tamamlanamadı. Lütfen tekrar deneyin." else uiState.message
+                    )
                     return@launch
                 }
-                // Clear any previous account before rendering/loading this account.
-                uiState = TrackerUiState(loading = true, authChecking = false, signedIn = true, email = user.email.orEmpty())
-                ensureProfile(user.id, user.email.orEmpty())
-                loadAccountData(user.id)
-            }.onFailure { uiState = uiState.copy(loading = false, authChecking = false, message = "Veriler yüklenemedi. Lütfen tekrar deneyin.") }
+                uiState = TrackerUiState(loading = true, authChecking = false, signedIn = true, email = signedInUser.email.orEmpty())
+                ensureProfile(signedInUser.id, signedInUser.email.orEmpty())
+                loadAccountData(signedInUser.id)
+            }.onFailure {
+                uiState = uiState.copy(loading = false, authChecking = false, message = "Veriler yüklenemedi. Lütfen tekrar deneyin.")
+            }
         }
     }
 
@@ -255,6 +271,10 @@ class TrackerViewModel : ViewModel() {
             uiState = uiState.copy(loading = true, message = null)
             runCatching {
                 client.auth.signInWith(Google, redirectUrl = SupabaseProvider.oauthRedirectUrl)
+            }.onSuccess {
+                // The browser owns the OAuth flow now. Do not leave the login button
+                // in an endless loading state while waiting for the deep-link callback.
+                uiState = uiState.copy(loading = false)
             }.onFailure {
                 uiState = uiState.copy(
                     loading = false,
