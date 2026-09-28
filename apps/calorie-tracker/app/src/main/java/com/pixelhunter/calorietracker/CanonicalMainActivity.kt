@@ -209,8 +209,7 @@ private fun CanonicalTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = 
     fun openRecipeBuilder() = context.startActivity(Intent(context, RecipeBuilderActivity::class.java))
 
     LaunchedEffect(authRefreshKey) {
-        if (authRefreshKey > 0) delay(250)
-        vm.refreshSessionAndData()
+        vm.refreshSessionAndData(waitForOAuthCallback = authRefreshKey > 0)
     }
     LaunchedEffect(state.message) {
         state.message?.let {
