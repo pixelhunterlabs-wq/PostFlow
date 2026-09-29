@@ -130,7 +130,7 @@ Supabase Auth setup:
 
 1. In Supabase Dashboard → Authentication → Providers → Google, enable Google and enter the Google **Web application** OAuth client ID and client secret.
 2. In Google Cloud Console → Google Auth Platform → Clients → that Web application client, add this exact Authorized redirect URI:
-   `https://jecbdzkunqwgpzbiwdak.supabase.co/auth/v1/callback`
+   `https://lyjkoypfoopspbeofpvt.supabase.co/auth/v1/callback`
 3. In Supabase Dashboard → Authentication → URL Configuration → Redirect URLs, add this exact mobile callback:
    `calorietracker://login`
 4. Keep `calorietracker://login` in `ModernMainActivity`'s Android intent filter and in `SupabaseProvider.oauthRedirectUrl`; the values must match exactly.
