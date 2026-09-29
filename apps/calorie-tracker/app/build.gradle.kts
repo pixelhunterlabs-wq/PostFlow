@@ -32,6 +32,7 @@ android {
         versionName = "1.0.0"
 
         val supabaseUrl = localProps.getProperty("SUPABASE_URL", defaultSupabaseUrl)
+        require(supabaseUrl == defaultSupabaseUrl) { "SUPABASE_URL must target the active calorie-tracker-db project" }
         val supabaseKey = localProps.getProperty("SUPABASE_KEY", defaultSupabasePublishableKey)
         buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
         buildConfigField("String", "SUPABASE_KEY", "\"$supabaseKey\"")

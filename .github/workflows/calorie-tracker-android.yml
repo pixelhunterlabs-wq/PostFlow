@@ -47,10 +47,10 @@ jobs:
           echo "SUPABASE_KEY=sb_publishable_OnSKYpPx7JYWigaxdk73yA_mdx0QiWN" >> local.properties
 
       - name: Run unit tests
-        run: gradle -p apps/calorie-tracker testDebugUnitTest --stacktrace
+        run: apps/calorie-tracker/gradlew -p apps/calorie-tracker test --stacktrace
 
       - name: Build debug APK
-        run: gradle -p apps/calorie-tracker assembleDebug --stacktrace
+        run: apps/calorie-tracker/gradlew -p apps/calorie-tracker assembleDebug --stacktrace
 
       - name: Upload debug APK
         if: success()

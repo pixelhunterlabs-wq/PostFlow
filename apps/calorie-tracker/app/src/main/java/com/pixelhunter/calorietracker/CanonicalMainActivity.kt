@@ -131,16 +131,39 @@ import kotlin.math.abs
  * continue to use the existing production data paths.
  */
 class CanonicalMainActivity : ComponentActivity() {
-    private var authCallbackTick by mutableIntStateOf(0)
+    private var callbackPending by mutableStateOf(false)
+    private var callbackError by mutableStateOf(false)
+
+    private fun handleAuthIntent(intent: Intent) {
+        if (intent.data?.scheme != "calorietracker" || intent.data?.host != "login") return
+        if (!OAuthCallback.isValid(intent.data.toString())) {
+            callbackPending = false
+            callbackError = true
+            return
+        }
+        callbackPending = true
+        callbackError = false
+        SupabaseProvider.client?.handleDeeplinks(intent,
+            onSessionSuccess = {
+                setIntent(Intent(this.intent).apply { data = null })
+                callbackPending = false
+            },
+            onError = { callbackPending = false; callbackError = true }
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        SupabaseProvider.client?.handleDeeplinks(intent)
-        if (intent?.data?.scheme == "calorietracker" && intent.data?.host == "login") authCallbackTick++
+        handleAuthIntent(intent)
         setContent {
             KaloriDarkTheme {
-                CanonicalTrackerApp(authRefreshKey = authCallbackTick)
+                if (callbackPending) CanonicalCenterState("Oturum açılıyor", "Google hesabın doğrulanıyor.")
+                else if (callbackError) Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Google girişi iptal edildi veya doğrulanamadı.")
+                    Button(onClick = { callbackError = false }) { Text("Tekrar dene") }
+                }
+                else CanonicalTrackerApp()
             }
         }
     }
@@ -148,8 +171,7 @@ class CanonicalMainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        SupabaseProvider.client?.handleDeeplinks(intent)
-        authCallbackTick++
+        handleAuthIntent(intent)
     }
 }
 
@@ -166,7 +188,7 @@ private enum class ProgressRange(val label: String) { DAY("Gün"), WEEK("Hafta")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CanonicalTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = viewModel()) {
+private fun CanonicalTrackerApp(vm: TrackerViewModel = viewModel()) {
     val state = vm.uiState
     val context = androidx.compose.ui.platform.LocalContext.current
     val snackbar = remember { SnackbarHostState() }
@@ -208,9 +230,6 @@ private fun CanonicalTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = 
     fun openPrivacy() = context.startActivity(Intent(context, PrivacyPolicyActivity::class.java))
     fun openRecipeBuilder() = context.startActivity(Intent(context, RecipeBuilderActivity::class.java))
 
-    LaunchedEffect(authRefreshKey) {
-        vm.refreshSessionAndData(waitForOAuthCallback = authRefreshKey > 0)
-    }
     LaunchedEffect(state.message) {
         state.message?.let {
             snackbar.showSnackbar(it)
@@ -220,13 +239,17 @@ private fun CanonicalTrackerApp(authRefreshKey: Int = 0, vm: TrackerViewModel = 
 
     when {
         !SupabaseProvider.configured -> CanonicalCenterState("Bağlantı ayarları eksik", "Supabase bağlantısı yapılandırılmamış.")
+        state.authChecking && state.accountLoadError != null -> Column {
+            Text(state.accountLoadError.orEmpty())
+            Button(onClick = { vm.refreshSessionAndData() }) { Text("Tekrar dene") }
+        }
         state.authChecking -> CanonicalCenterState("Oturum açılıyor", "Hesabın kontrol ediliyor.")
         !state.signedIn -> CanonicalLoginScreen(
             loading = state.loading,
             onGoogle = vm::signInWithGoogle,
             onPrivacy = ::openPrivacy
         )
-        !state.onboardingCompleted && state.entries.isEmpty() -> CanonicalOnboardingScreen(state.email, vm::completeOnboarding)
+        state.requiresOnboarding -> CanonicalOnboardingScreen(state.email, vm::completeOnboarding)
         else -> {
             BackHandler(enabled = page != CanonicalPage.ROOT) {
                 page = CanonicalPage.ROOT

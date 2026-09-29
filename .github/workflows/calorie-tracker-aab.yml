@@ -67,7 +67,7 @@ jobs:
           fi
 
       - name: Build release AAB
-        run: gradle -p apps/calorie-tracker bundleRelease --stacktrace
+        run: apps/calorie-tracker/gradlew -p apps/calorie-tracker bundleRelease --stacktrace
 
       - name: Verify signed AAB
         if: env.CALORIE_SIGNING_CONFIGURED == 'true'

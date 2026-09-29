@@ -35,11 +35,11 @@ AAB mevcut Google Play upload key ile imzalanmış ve `jarsigner` ile doğrulanm
 
 Privacy Policy:
 
-`https://jecbdzkunqwgpzbiwdak.supabase.co/functions/v1/calorie-privacy`
+`https://lyjkoypfoopspbeofpvt.supabase.co/functions/v1/calorie-privacy`
 
 Account deletion information:
 
-`https://jecbdzkunqwgpzbiwdak.supabase.co/functions/v1/calorie-delete-account`
+`https://lyjkoypfoopspbeofpvt.supabase.co/functions/v1/calorie-delete-account`
 
 Her iki sayfa da public statik HTML Edge Function olarak deploy edilmiştir ve kullanıcı verisine erişmez.
 

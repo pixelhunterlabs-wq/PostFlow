@@ -22,6 +22,7 @@ import com.google.android.gms.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.android.gms.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.auth.FlowType
 import io.github.jan.supabase.auth.Auth
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.handleDeeplinks
@@ -33,6 +34,9 @@ import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.from
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.rpc
+import io.github.jan.supabase.auth.status.SessionStatus
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -60,6 +64,10 @@ data class CalorieProfile(
     @SerialName("goal_weight_kg") val goalWeightKg: Double? = null
 )
 
+internal fun localDateText(timestamp: String): String = runCatching {
+    Instant.parse(timestamp).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+}.getOrElse { timestamp.take(10) }
+
 @Serializable
 data class CalorieEntry(
     val id: String = UUID.randomUUID().toString(),
@@ -75,7 +83,7 @@ data class CalorieEntry(
     @SerialName("photo_url") val photoUrl: String? = null,
     @SerialName("eaten_at") val eatenAt: String = Instant.now().toString()
 ) {
-    fun dateText(): String = eatenAt.take(10)
+    fun dateText(): String = localDateText(eatenAt)
 }
 
 @Serializable
@@ -85,7 +93,7 @@ data class WeightEntry(
     @SerialName("weight_kg") val weightKg: Double,
     @SerialName("measured_at") val measuredAt: String = Instant.now().toString()
 ) {
-    fun dateText(): String = measuredAt.take(10)
+    fun dateText(): String = localDateText(measuredAt)
 }
 
 @Serializable data class DailyWater(
@@ -150,6 +158,7 @@ object SupabaseProvider {
     val client: SupabaseClient? by lazy {
         if (!configured) null else createSupabaseClient(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY) {
             install(Auth) {
+                flowType = FlowType.PKCE
                 scheme = "calorietracker"
                 host = "login"
             }
@@ -162,6 +171,7 @@ object SupabaseProvider {
 data class TrackerUiState(
     val loading: Boolean = false,
     val authChecking: Boolean = true,
+    val accountLoadError: String? = null,
     val signedIn: Boolean = false,
     val email: String = "",
     val calorieGoal: Int = 2000,
@@ -178,6 +188,8 @@ data class TrackerUiState(
     val accountDeleting: Boolean = false,
     val message: String? = null
 ) {
+    val requiresOnboarding get() = signedIn && !authChecking && !onboardingCompleted && entries.isEmpty()
+
     private val today = LocalDate.now()
     val todayEntries get() = entries.filter { it.dateText() == today.toString() }
     val caloriesToday get() = todayEntries.sumOf { it.calories }
@@ -221,43 +233,51 @@ class TrackerViewModel : ViewModel() {
     private val supabase get() = SupabaseProvider.client
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
-    init { refreshSessionAndData() }
+    private var sessionRefreshJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            supabase?.auth?.sessionStatus?.collect { status ->
+                when (status) {
+                    is SessionStatus.Authenticated -> refreshSessionAndData()
+                    is SessionStatus.NotAuthenticated -> {
+                        sessionRefreshJob?.cancel()
+                        uiState = TrackerUiState(authChecking = false)
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
 
     fun consumeMessage() { uiState = uiState.copy(message = null) }
     fun showMessage(message: String) { uiState = uiState.copy(message = message) }
     fun clearBarcodeProduct() { uiState = uiState.copy(barcodeProduct = null) }
 
-    fun refreshSessionAndData(waitForOAuthCallback: Boolean = false) {
+    fun refreshSessionAndData() {
         val client = supabase ?: run {
             uiState = uiState.copy(message = "Supabase ayarları eksik. local.properties dosyasını doldurun.")
             return
         }
-        viewModelScope.launch {
-            runCatching {
-                var user = client.auth.currentUserOrNull()
-                if (user == null && waitForOAuthCallback) {
-                    uiState = uiState.copy(loading = true, authChecking = true, message = null)
-                    repeat(24) {
-                        delay(250)
-                        user = client.auth.currentUserOrNull()
-                        if (user != null) return@repeat
-                    }
-                }
-                val signedInUser = user
+        sessionRefreshJob?.cancel()
+        sessionRefreshJob = viewModelScope.launch {
+            uiState = uiState.copy(authChecking = true, loading = true, accountLoadError = null)
+            try {
+                client.auth.awaitInitialization()
+                val signedInUser = client.auth.currentUserOrNull()
                 if (signedInUser == null) {
-                    uiState = uiState.copy(
-                        signedIn = false,
-                        loading = false,
-                        authChecking = false,
-                        message = if (waitForOAuthCallback) "Google oturumu tamamlanamadı. Lütfen tekrar deneyin." else uiState.message
-                    )
+                    uiState = TrackerUiState(authChecking = false)
                     return@launch
                 }
-                uiState = TrackerUiState(loading = true, authChecking = false, signedIn = true, email = signedInUser.email.orEmpty())
+                uiState = uiState.copy(signedIn = true, email = signedInUser.email.orEmpty())
                 ensureProfile(signedInUser.id, signedInUser.email.orEmpty())
                 loadAccountData(signedInUser.id)
-            }.onFailure {
-                uiState = uiState.copy(loading = false, authChecking = false, message = "Veriler yüklenemedi. Lütfen tekrar deneyin.")
+                uiState = uiState.copy(authChecking = false, loading = false)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                // A data/network failure must never be interpreted as missing onboarding.
+                uiState = uiState.copy(loading = false, accountLoadError = "Veriler yüklenemedi. Lütfen tekrar deneyin.")
             }
         }
     }

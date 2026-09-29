@@ -161,3 +161,11 @@ and redirects to it after it completes the Google callback.
 - complete Play Console Data Safety / Health Apps declarations and content rating
 - optional camera/AI food estimation
 - optional Play Billing premium tier
+
+## Google OAuth deployment
+
+Use a Google Auth Platform **Web application** client for Kalori Takip. Its sole Supabase callback is `https://lyjkoypfoopspbeofpvt.supabase.co/auth/v1/callback`. Configure its client ID and secret only in the hosted project's Authentication → Providers → Google settings and enable Google. Add `calorietracker://login` to Authentication → URL Configuration → Redirect URLs. The client secret must never enter Android configuration, CI, source control, logs or documentation. Android calls the Google provider with this deep link; enabling the provider cannot be replaced with a client-side change.
+
+Session state is observed continuously. Stored sessions finish loading before routing; account data and onboarding status finish loading before the account screen appears. OAuth callbacks import the SDK session before refreshing data, and the launcher uses singleTask to reuse the existing activity. Test both a warm callback and a callback after process death, then reopen the app and verify completed onboarding remains completed.
+
+Build from this directory with `./gradlew test` and `./gradlew assembleDebug`. Local `local.properties` is ignored. The bundled Supabase publishable key is public client configuration, not a server credential; never substitute a service-role key or Google secret.
