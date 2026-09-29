@@ -1,4 +1,5 @@
 name: Calorie Tracker Android Build
+# build-trigger: corrected-supabase-endpoint
 
 on:
   push:
