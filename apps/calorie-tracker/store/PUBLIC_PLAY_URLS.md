@@ -6,7 +6,7 @@ Google Play Console için kullanılacak kalıcı public HTTPS sayfalar:
 
 ## Gizlilik politikası
 
-https://jecbdzkunqwgpzbiwdak.supabase.co/functions/v1/calorie-privacy
+https://lyjkoypfoopspbeofpvt.supabase.co/functions/v1/calorie-privacy
 
 - Public Supabase Edge Function
 - JWT gerektirmez
@@ -16,7 +16,7 @@ https://jecbdzkunqwgpzbiwdak.supabase.co/functions/v1/calorie-privacy
 
 ## Hesap ve veri silme bilgileri
 
-https://jecbdzkunqwgpzbiwdak.supabase.co/functions/v1/calorie-delete-account
+https://lyjkoypfoopspbeofpvt.supabase.co/functions/v1/calorie-delete-account
 
 - Public Supabase Edge Function
 - JWT gerektirmez
@@ -26,7 +26,7 @@ https://jecbdzkunqwgpzbiwdak.supabase.co/functions/v1/calorie-delete-account
 
 ## Google Play alanları
 
-- Privacy Policy URL: `https://jecbdzkunqwgpzbiwdak.supabase.co/functions/v1/calorie-privacy`
-- Account deletion URL: `https://jecbdzkunqwgpzbiwdak.supabase.co/functions/v1/calorie-delete-account`
+- Privacy Policy URL: `https://lyjkoypfoopspbeofpvt.supabase.co/functions/v1/calorie-privacy`
+- Account deletion URL: `https://lyjkoypfoopspbeofpvt.supabase.co/functions/v1/calorie-delete-account`
 
 Not: Eski PostFlow Vercel production deployment'ında hazırlanan `/privacy/calorie-tracker` ve `/delete-account/calorie-tracker` yolları henüz deploy edilmediği için Play Console'a verilmemelidir.
