@@ -11,8 +11,8 @@ val localProps = Properties().apply {
     if (f.exists()) f.inputStream().use(::load)
 }
 
-val defaultSupabaseUrl = "https://jecbdzkunqwgpzbiwdak.supabase.co"
-val defaultSupabasePublishableKey = "sb_publishable_LggEu5U2E1Wg-lp1b2ih3g_tNpSfrIG"
+val defaultSupabaseUrl = "https://lyjkoypfoopspbeofpvt.supabase.co"
+val defaultSupabasePublishableKey = "sb_publishable_OnSKYpPx7JYWigaxdk73yA_mdx0QiWN"
 
 val releaseStoreFile = System.getenv("CALORIE_KEYSTORE_PATH")
 val releaseStorePassword = System.getenv("CALORIE_KEYSTORE_PASSWORD")
