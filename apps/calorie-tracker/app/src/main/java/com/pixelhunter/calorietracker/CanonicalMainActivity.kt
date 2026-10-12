@@ -318,6 +318,7 @@ private fun CanonicalTrackerApp(vm: TrackerViewModel = viewModel()) {
                                 onWeight = { page = CanonicalPage.WEIGHT },
                                 onWellness = ::openWellness,
                                 onRecipeBuilder = ::openRecipeBuilder,
+                                onPremium = { context.startActivity(Intent(context, PremiumPlansActivity::class.java)) },
                                 onPrivacy = ::openPrivacy,
                                 onSignOut = vm::signOut,
                                 onDelete = { showDeleteAccount = true }
@@ -1171,6 +1172,7 @@ private fun CanonicalProfileScreen(
     onWeight: () -> Unit,
     onWellness: () -> Unit,
     onRecipeBuilder: () -> Unit,
+    onPremium: () -> Unit,
     onPrivacy: () -> Unit,
     onSignOut: () -> Unit,
     onDelete: () -> Unit
@@ -1201,6 +1203,7 @@ private fun CanonicalProfileScreen(
         item { CanonicalSettingsRow(Icons.Filled.MonitorWeight, "Kilo Takibi", state.weights.firstOrNull()?.let { "Güncel ${canonicalWeight(it.weightKg)} kg" } ?: "Kilo kaydı ekle", onWeight) }
         item { CanonicalSettingsRow(Icons.Filled.Eco, "Sağlık ve Hatırlatmalar", "Su, Health Connect ve öğün bildirimleri", onWellness) }
         item { CanonicalSettingsRow(Icons.Filled.RestaurantMenu, "Kayıtlı Öğünler", "${state.savedMeals.size} kayıtlı öğün • tarif oluştur", onRecipeBuilder) }
+        item { CanonicalSettingsRow(Icons.Filled.Star, "Ücretsiz ve Premium", "Paketleri ve özellikleri karşılaştır", onPremium) }
         item { CanonicalSettingsRow(Icons.Filled.Security, "Gizlilik Politikası", "Verilerin bizim için önemli", onPrivacy) }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF251314)), border = BorderStroke(1.dp, Color(0xFF4B2225)), shape = RoundedCornerShape(14.dp)) {
