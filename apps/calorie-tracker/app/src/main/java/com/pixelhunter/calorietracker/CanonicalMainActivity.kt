@@ -698,19 +698,6 @@ private fun CanonicalHomeScreen(
             }
         }
         item {
-            androidx.compose.foundation.lazy.LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(categories) { category ->
-                    FilterChip(
-                        selected = selectedCategory == category,
-                        onClick = { selectedCategory = category },
-                        label = { Text(category) }
-                    )
-                }
-            }
-        }
-        item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CanonicalQuickButton("Fotoğraf", Icons.Filled.CameraAlt, onPhoto, Modifier.weight(1f))
                 CanonicalQuickButton("Barkod", Icons.Filled.QrCodeScanner, onBarcode, Modifier.weight(1f))
@@ -865,6 +852,19 @@ private fun CanonicalFoodAddScreen(
                 shape = RoundedCornerShape(14.dp),
                 colors = canonicalTextFieldColors()
             )
+        }
+        item {
+            androidx.compose.foundation.lazy.LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(categories) { category ->
+                    FilterChip(
+                        selected = selectedCategory == category,
+                        onClick = { selectedCategory = category },
+                        label = { Text(category) }
+                    )
+                }
+            }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
