@@ -87,8 +87,11 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
         }
     }
 
-    val suggestion = remember(state.weights, state.calorieGoal, weeklyTarget) {
-        dynamicGoalSuggestion(state.calorieGoal, state.weights, weeklyTarget)
+    var suggestion by remember { mutableStateOf<PremiumGoal?>(null) }
+    var suggestionMessage by remember { mutableStateOf("Üyelik kontrol ediliyor…") }
+    LaunchedEffect(state.weights, state.calorieGoal, weeklyTarget) {
+        suggestion = null
+        runCatching { PremiumAccess.report(target = weeklyTarget) }.onSuccess { suggestion = it.suggestion; suggestionMessage = "Öneri için en az iki farklı tarihte kilo kaydı gerekli." }.onFailure { suggestionMessage = it.message ?: "Üyelik doğrulanamadı." }
     }
 
     Scaffold(
@@ -212,13 +215,14 @@ private fun WellnessHubScreen(vm: TrackerViewModel = viewModel()) {
                         }
                     }
                     Spacer(Modifier.height(10.dp))
-                    if (suggestion == null) {
-                        Text("Öneri için en az iki farklı tarihte kilo kaydı gerekli.", color = KaloriMuted)
+                    val currentSuggestion = suggestion
+                    if (currentSuggestion == null) {
+                        Text(suggestionMessage, color = KaloriMuted)
                     } else {
-                        Text("Gözlenen haftalık değişim: ${"%.2f".format(suggestion.observedWeeklyChangeKg)} kg", color = KaloriMuted)
-                        Text("Mevcut: ${suggestion.currentGoal} kcal  →  Öneri: ${suggestion.suggestedGoal} kcal", color = KaloriGreen, fontWeight = FontWeight.Bold)
-                        if (suggestion.suggestedGoal != suggestion.currentGoal) {
-                            Button(onClick = { vm.updateGoal(suggestion.suggestedGoal); message = "Yeni kalori hedefi uygulandı" }) { Text("Öneriyi uygula") }
+                        Text("Gözlenen haftalık değişim: ${"%.2f".format(currentSuggestion.observedWeeklyChangeKg)} kg", color = KaloriMuted)
+                        Text("Mevcut: ${currentSuggestion.currentGoal} kcal  →  Öneri: ${currentSuggestion.suggestedGoal} kcal", color = KaloriGreen, fontWeight = FontWeight.Bold)
+                        if (currentSuggestion.suggestedGoal != currentSuggestion.currentGoal) {
+                            Button(onClick = { vm.updateGoal(currentSuggestion.suggestedGoal); message = "Yeni kalori hedefi uygulandı" }) { Text("Öneriyi uygula") }
                         } else {
                             Text("Mevcut hedef kilo trendinle uyumlu.", color = KaloriGreen)
                         }

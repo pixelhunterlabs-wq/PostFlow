@@ -1027,64 +1027,26 @@ private fun CanonicalBarcodeScreen(
 
 @Composable
 private fun CanonicalProgressScreen(state: TrackerUiState, onWeight: () -> Unit, onAddWeight: () -> Unit) {
-    var range by remember { mutableStateOf(ProgressRange.WEEK) }
-    val chart = canonicalChartData(state, range)
-    val average = if (chart.isEmpty()) 0 else chart.map { it.second }.average().toInt()
-    val adherence = if (chart.isEmpty()) 0 else (chart.count { it.second > 0 && abs(it.second - state.calorieGoal) <= state.calorieGoal * .10 } * 100 / chart.size.coerceAtLeast(1))
-    val macroTotal = state.proteinToday + state.carbsToday + state.fatToday
-
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp, 18.dp, 16.dp, 30.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item { Text("İlerleme", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black) }
-        item { CanonicalProgressSelector(range) { range = it } }
-        item {
-            CanonicalNeonCard {
-                Text("Kalori Alımı", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(12.dp))
-                CanonicalBarChart(chart, state.calorieGoal)
-            }
+    PremiumGate("reports") {
+        var range by remember { mutableStateOf(ProgressRange.WEEK) }
+        var report by remember { mutableStateOf<PremiumReport?>(null) }
+        var error by remember { mutableStateOf<String?>(null) }
+        var retry by remember { mutableIntStateOf(0) }
+        LaunchedEffect(range, retry, state.entries, state.weights) {
+            report = null; error = null
+            runCatching { PremiumAccess.report(range.name) }.onSuccess { report = it }.onFailure { error = it.message }
         }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CanonicalStatCard("Ortalama", "${canonicalNumber(average)} kcal", Icons.Filled.BarChart, Modifier.weight(1f))
-                CanonicalStatCard("Hedefe Uyum", "%$adherence", Icons.Filled.TrackChanges, Modifier.weight(1f))
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item { Text("Premium Beslenme Analizi", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black) }
+            item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(ProgressRange.WEEK, ProgressRange.MONTH, ProgressRange.YEAR).forEach { option -> FilterChip(selected = range == option, onClick = { range = option }, label = { Text(option.label) }) } } }
+            error?.let { item { Text(it, color = KaloriMuted); TextButton(onClick = { retry++ }) { Text("Yeniden dene") } } }
+            if (report == null && error == null) item { Text("Analiz hazırlanıyor…", color = KaloriMuted) }
+            report?.let { data ->
+                item { CanonicalNeonCard { Text("Kalori Alımı"); CanonicalBarChart(data.chart.map { it.date.takeLast(5) to it.calories }, state.calorieGoal) } }
+                item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { CanonicalStatCard("Kayıtlı gün ortalaması", "${data.average} kcal", Icons.Filled.BarChart, Modifier.weight(1f)); CanonicalStatCard("Hedefe Uyum", "%${data.adherence}", Icons.Filled.TrackChanges, Modifier.weight(1f)) } }
+                item { CanonicalNeonCard { Text("Dönem toplamları • ${data.recordedDays} kayıtlı gün", fontWeight = FontWeight.Bold); Text("Protein: ${data.protein.toInt()} g\nKarbonhidrat: ${data.carbs.toInt()} g\nYağ: ${data.fat.toInt()} g", color = KaloriMuted) } }
             }
-        }
-        item {
-            CanonicalNeonCard {
-                Text("Makro Dağılımı", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(10.dp))
-                val p = if (macroTotal > 0) (state.proteinToday / macroTotal).toFloat() else 0f
-                val c = if (macroTotal > 0) (state.carbsToday / macroTotal).toFloat() else 0f
-                val f = if (macroTotal > 0) (state.fatToday / macroTotal).toFloat() else 0f
-                Row(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(8.dp))) {
-                    if (p > 0f) Box(Modifier.weight(p).fillMaxHeight().background(KaloriGreen))
-                    if (c > 0f) Box(Modifier.weight(c).fillMaxHeight().background(KaloriBlue))
-                    if (f > 0f) Box(Modifier.weight(f).fillMaxHeight().background(KaloriYellow))
-                    if (macroTotal <= 0) Box(Modifier.fillMaxSize().background(Color(0xFF24312D)))
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Protein ${state.proteinToday.toInt()} g", color = KaloriGreen, style = MaterialTheme.typography.bodySmall)
-                    Text("Karb ${state.carbsToday.toInt()} g", color = KaloriBlue, style = MaterialTheme.typography.bodySmall)
-                    Text("Yağ ${state.fatToday.toInt()} g", color = KaloriYellow, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-        item {
-            CanonicalNeonCard {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Kilo Takibi", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text(state.weights.firstOrNull()?.let { "Güncel ${canonicalWeight(it.weightKg)} kg" } ?: "Henüz kilo kaydı yok", color = KaloriMuted)
-                    }
-                    TextButton(onClick = onAddWeight) { Text("Ekle", color = KaloriGreen) }
-                    IconButton(onClick = onWeight) { Icon(Icons.Filled.ChevronRight, null, tint = KaloriGreen) }
-                }
-            }
+            item { OutlinedButton(onClick = onWeight) { Text("Gelişmiş kilo grafiği") }; TextButton(onClick = onAddWeight) { Text("Kilo kaydı ekle") } }
         }
     }
 }
@@ -1151,7 +1113,14 @@ private fun CanonicalWeightScreen(state: TrackerUiState, onAddWeight: () -> Unit
         }
         item {
             CanonicalNeonCard {
-                if (points.size < 2) {
+                PremiumGate("weight_chart") {
+                var report by remember { mutableStateOf<PremiumReport?>(null) }
+                var error by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(state.weights) { runCatching { PremiumAccess.report() }.onSuccess { report = it }.onFailure { error = it.message } }
+                val points = report?.weights.orEmpty().take(18).reversed()
+                if (error != null) Text(error.orEmpty(), color = KaloriMuted)
+                else if (report == null) Text("Grafik yükleniyor…", color = KaloriMuted)
+                else if (points.size < 2) {
                     Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
                         Text("Grafik için en az iki kilo kaydı ekle", color = KaloriMuted)
                     }
@@ -1161,6 +1130,7 @@ private fun CanonicalWeightScreen(state: TrackerUiState, onAddWeight: () -> Unit
                     Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFF0A3A24), border = BorderStroke(1.dp, KaloriGreen.copy(alpha = .5f))) {
                         Text("${canonicalWeight(latest.weightKg)} kg  •  ${latest.dateText()}", modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), color = KaloriText, fontWeight = FontWeight.Bold)
                     }
+                }
                 }
             }
         }
@@ -1226,6 +1196,8 @@ private fun CanonicalProfileScreen(
     onSignOut: () -> Unit,
     onDelete: () -> Unit
 ) {
+    var membership by remember { mutableStateOf("Üyelik kontrol ediliyor…") }
+    LaunchedEffect(state.email) { runCatching { PremiumAccess.request() }.onSuccess { membership = if (it.optBoolean("premium")) "Premium • ${it.optInt("photoUsed")} / ${it.optInt("photoLimit")} AI analiz" else "Ücretsiz • ${it.optInt("photoUsed")} / 5 AI analiz" }.onFailure { membership = "Üyelik bilgisi alınamadı • Paketleri görüntüle" } }
     val name = canonicalDisplayName(state.email)
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -1252,7 +1224,7 @@ private fun CanonicalProfileScreen(
         item { CanonicalSettingsRow(Icons.Filled.MonitorWeight, "Kilo Takibi", state.weights.firstOrNull()?.let { "Güncel ${canonicalWeight(it.weightKg)} kg" } ?: "Kilo kaydı ekle", onWeight) }
         item { CanonicalSettingsRow(Icons.Filled.Eco, "Sağlık ve Hatırlatmalar", "Su, Health Connect ve öğün bildirimleri", onWellness) }
         item { CanonicalSettingsRow(Icons.Filled.RestaurantMenu, "Kayıtlı Öğünler", "${state.savedMeals.size} kayıtlı öğün • tarif oluştur", onRecipeBuilder) }
-        item { CanonicalSettingsRow(Icons.Filled.Star, "Ücretsiz ve Premium", "Paketleri ve özellikleri karşılaştır", onPremium) }
+        item { CanonicalSettingsRow(Icons.Filled.Star, "Ücretsiz ve Premium", membership, onPremium) }
         item { CanonicalSettingsRow(Icons.Filled.Security, "Gizlilik Politikası", "Verilerin bizim için önemli", onPrivacy) }
         item {
             Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF251314)), border = BorderStroke(1.dp, Color(0xFF4B2225)), shape = RoundedCornerShape(14.dp)) {

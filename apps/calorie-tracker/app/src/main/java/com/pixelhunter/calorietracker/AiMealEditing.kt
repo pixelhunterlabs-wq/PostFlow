@@ -10,6 +10,7 @@ fun isValidAiMeal(item: AiMealItem): Boolean = item.grams > 0 && item.calories >
     item.proteinG >= 0 && item.carbsG >= 0 && item.fatG >= 0
 fun selectedAiMeals(meals: List<EditableAiMeal>): List<AiMealItem> = meals.filter { it.included }.map { it.item }
 fun aiPhotoError(code: Int, body: String = ""): String = when {
+    body.contains("quota_exceeded") -> "Bu ayki AI fotoğraf analizi hakkın doldu. Ücretsiz: 5, Premium: 100 analiz/ay."
     code == 401 -> "Oturum süren dolmuş. Tekrar giriş yap."
     code == 413 -> "Fotoğraf çok büyük. Daha küçük bir fotoğraf seç."
     body.contains("ai_not_configured") -> "AI analizi şu anda yapılandırılmamış."

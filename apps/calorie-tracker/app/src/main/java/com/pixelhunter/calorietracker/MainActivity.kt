@@ -430,6 +430,7 @@ class TrackerViewModel : ViewModel() {
         viewModelScope.launch {
             val user = client.auth.currentUserOrNull() ?: return@launch
             runCatching {
+                if (source == "voice") PremiumAccess.requireFeature("voice")
                 client.from("calorie_food_entries").insert(
                     CalorieEntry(userId = user.id, foodName = name.trim(), mealType = meal.trim().ifBlank { "Öğün" }, grams = grams, calories = calories, proteinG = protein, carbsG = carbs, fatG = fat, source = source)
                 )

@@ -1,4 +1,4 @@
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { authenticate, refreshAccess, errorResponse } from "../_shared/access.ts";
 
 type PhotoRequest = {
   imageBase64?: string;
@@ -17,7 +17,7 @@ type MealItem = {
 
 const jsonHeaders = { "Content-Type": "application/json; charset=utf-8" };
 
-Deno.serve(async (req: Request) => {
+async function analyze(req: Request) {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "method_not_allowed" }), { status: 405, headers: jsonHeaders });
   }
@@ -50,6 +50,7 @@ Deno.serve(async (req: Request) => {
 
   const aiResponse = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
+    signal: AbortSignal.timeout(60000),
     headers: {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
@@ -64,7 +65,7 @@ Deno.serve(async (req: Request) => {
         ],
       }],
       max_output_tokens: 1400,
-      text: { format: { type: "json_schema", name: "meal_analysis", strict: true, schema: { type: "object", additionalProperties: false, required: ["items", "note"], properties: { items: { type: "array", items: { type: "object", additionalProperties: false, required: ["name", "grams", "calories", "protein_g", "carbs_g", "fat_g", "confidence"], properties: { name: { type: "string" }, grams: { type: "number" }, calories: { type: "number" }, protein_g: { type: "number" }, carbs_g: { type: "number" }, fat_g: { type: "number" }, confidence: { type: "number" } } } }, note: { type: "string" } } } },
+      text: { format: { type: "json_schema", name: "meal_analysis", strict: true, schema: { type: "object", additionalProperties: false, required: ["items", "note"], properties: { items: { type: "array", items: { type: "object", additionalProperties: false, required: ["name", "grams", "calories", "protein_g", "carbs_g", "fat_g", "confidence"], properties: { name: { type: "string" }, grams: { type: "number" }, calories: { type: "number" }, protein_g: { type: "number" }, carbs_g: { type: "number" }, fat_g: { type: "number" }, confidence: { type: "number" } } } }, note: { type: "string" } } } } },
     }),
   });
 
@@ -84,7 +85,7 @@ Deno.serve(async (req: Request) => {
   try {
     analysis = JSON.parse(outputText);
   } catch {
-    console.error("Unable to parse AI JSON", outputText.slice(0, 1500));
+    console.error("Unable to parse AI JSON");
     return new Response(JSON.stringify({ error: "invalid_ai_response" }), { status: 502, headers: jsonHeaders });
   }
 
@@ -111,4 +112,26 @@ Deno.serve(async (req: Request) => {
     total,
     note: String(analysis.note || "Fotoğraftan hesaplanan değerler yaklaşık tahmindir.").slice(0, 500),
   }), { status: 200, headers: jsonHeaders });
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method !== "POST") return new Response(JSON.stringify({error:"method_not_allowed"}), {status:405,headers:jsonHeaders});
+  let context: Awaited<ReturnType<typeof authenticate>> | undefined;
+  let reservation: string | undefined;
+  try {
+    context = await authenticate(req);
+    if (!Deno.env.get("OPENAI_API_KEY")) return new Response(JSON.stringify({error:"ai_not_configured"}), {status:503,headers:jsonHeaders});
+    await refreshAccess(context.admin, context.user.id);
+    const { data, error } = await context.admin.rpc("calorie_reserve_photo", {p_user:context.user.id});
+    if (error) throw Error(error.message.includes("quota_exceeded") ? "quota_exceeded" : "verification_unavailable");
+    reservation = data;
+    const result = await analyze(req);
+    if (!result.ok) {
+      await context.admin.rpc("calorie_refund_photo", {p_user:context.user.id,p_reservation:reservation});
+    }
+    return result;
+  } catch(e) {
+    if (context && reservation) await context.admin.rpc("calorie_refund_photo", {p_user:context.user.id,p_reservation:reservation});
+    return errorResponse(e);
+  }
 });

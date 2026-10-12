@@ -47,6 +47,16 @@ jobs:
           echo "SUPABASE_URL=https://lyjkoypfoopspbeofpvt.supabase.co" >> local.properties
           echo "SUPABASE_KEY=sb_publishable_OnSKYpPx7JYWigaxdk73yA_mdx0QiWN" >> local.properties
 
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Test Premium server policies
+        run: deno test apps/calorie-tracker/supabase/functions/_shared/policy_test.ts
+
+      - name: Check Edge Functions
+        run: deno check --config apps/calorie-tracker/supabase/functions/deno.json apps/calorie-tracker/supabase/functions/premium-access/index.ts apps/calorie-tracker/supabase/functions/premium-reports/index.ts apps/calorie-tracker/supabase/functions/verify-google-play-subscription/index.ts apps/calorie-tracker/supabase/functions/analyze-food-photo/index.ts
+
       - name: Run unit tests
         run: apps/calorie-tracker/gradlew -p apps/calorie-tracker test --stacktrace
 

@@ -29,6 +29,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import org.json.JSONObject
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -47,6 +49,17 @@ class PremiumPlansActivity : ComponentActivity() {
     private lateinit var billing: GooglePlaySubscriptionBilling
     private var offers by mutableStateOf<Map<String, PlayPlanOffer>>(emptyMap())
     private var message by mutableStateOf<String?>(null)
+    private var membership by mutableStateOf("Üyelik kontrol ediliyor…")
+    private var quota by mutableStateOf("")
+
+    private fun refreshMembership() {
+        lifecycleScope.launch {
+            runCatching { PremiumAccess.request() }.onSuccess { data ->
+                membership = if (data.optBoolean("premium")) "Premium • ${if (data.optString("plan") == "yearly") "Yıllık" else "Aylık"} • ${if (data.optBoolean("canceled")) "Yenileme iptal; erişim bitişi" else "Bitiş"}: ${data.optString("expiresAt").take(10)}" else "Mevcut üyeliğin: Ücretsiz"
+                quota = "Bu ay AI fotoğraf analizi: ${data.optInt("photoUsed")} / ${data.optInt("photoLimit")} • Her takvim ayının başında (UTC) yenilenir."
+            }.onFailure { membership = it.message ?: "Üyelik doğrulanamadı." }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,13 +68,16 @@ class PremiumPlansActivity : ComponentActivity() {
             activity = this,
             scope = lifecycleScope,
             onPlans = { offers = it },
-            onMessage = { message = it }
+            onMessage = { message = it; refreshMembership() }
         )
         setContent {
             KaloriDarkTheme {
                 PremiumPlansScreen(
                     offers = offers,
                     message = message,
+                    membership = membership,
+                    quota = quota,
+                    onRestore = billing::restore,
                     onBuy = billing::purchase,
                     onManage = billing::openSubscriptionManagement
                 )
@@ -73,6 +89,7 @@ class PremiumPlansActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (::billing.isInitialized) billing.restore()
+        refreshMembership()
     }
 
     override fun onDestroy() {
@@ -88,6 +105,8 @@ private val planFeatures = listOf(
     PlanFeature("Manuel yemek ekleme", "✓", "✓"),
     PlanFeature("Su ve kilo takibi", "✓", "✓"),
     PlanFeature("Barkod okutma", "✓", "✓"),
+    PlanFeature("Temel geçmiş kayıtları", "✓", "✓"),
+    PlanFeature("Gelişmiş beslenme istatistikleri", "—", "✓"),
     PlanFeature("Fotoğrafla AI analiz", "5 / ay", "100 / ay"),
     PlanFeature("Sesle çoklu yemek ekleme", "—", "✓"),
     PlanFeature("Gelişmiş kilo grafikleri", "—", "✓"),
@@ -99,6 +118,9 @@ private val planFeatures = listOf(
 private fun PremiumPlansScreen(
     offers: Map<String, PlayPlanOffer>,
     message: String?,
+    membership: String,
+    quota: String,
+    onRestore: () -> Unit,
     onBuy: (String) -> Unit,
     onManage: () -> Unit
 ) {
@@ -111,11 +133,14 @@ private fun PremiumPlansScreen(
             Text("Sana uygun planı seç", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black, color = KaloriText)
             Spacer(Modifier.height(6.dp))
             Text("Ücretsiz ve Premium özellikleri karşılaştır.", color = KaloriMuted)
+            Spacer(Modifier.height(12.dp))
+            Text(membership, color = KaloriGreen, fontWeight = FontWeight.Bold)
+            Text(quota, color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 PlanPriceCard("ÜCRETSİZ", "0 TL", "Temel takip", false, Modifier.weight(1f))
-                PlanPriceCard("PREMIUM", offers[PremiumBillingConfig.MONTHLY]?.formattedPrice ?: "99,99 TL*", "Aylık abonelik", true, Modifier.weight(1f))
+                PlanPriceCard("PREMIUM", offers[PremiumBillingConfig.MONTHLY]?.formattedPrice ?: "Yakında", "Aylık abonelik", true, Modifier.weight(1f))
             }
         }
         item {
@@ -127,8 +152,8 @@ private fun PremiumPlansScreen(
                 Column(Modifier.fillMaxWidth().padding(18.dp)) {
                     Text("YILLIK PREMIUM", color = KaloriGreen, fontWeight = FontWeight.Black)
                     Spacer(Modifier.height(4.dp))
-                    Text((offers[PremiumBillingConfig.YEARLY]?.formattedPrice ?: "699,99 TL*") + " / yıl", color = KaloriText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-                    Text("Türkiye için önerilen yıllık fiyat • Kesin fiyat Google Play'de gösterilir.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+                    Text((offers[PremiumBillingConfig.YEARLY]?.formattedPrice ?: "Fiyat bekleniyor") + " / yıl", color = KaloriText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                    Text("Kesin fiyat Google Play'den alınır.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -168,6 +193,7 @@ private fun PremiumPlansScreen(
                     enabled = PremiumBillingConfig.SALES_ENABLED && offers.containsKey(PremiumBillingConfig.YEARLY),
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Yıllık Premium'a Geç") }
+                OutlinedButton(onClick = onRestore, modifier = Modifier.fillMaxWidth()) { Text("Satın alımları geri yükle") }
                 OutlinedButton(onClick = onManage, modifier = Modifier.fillMaxWidth()) {
                     Text("Google Play'de Aboneliğimi Yönet")
                 }
@@ -175,7 +201,7 @@ private fun PremiumPlansScreen(
                 if (!PremiumBillingConfig.SALES_ENABLED) {
                     Text("Abonelikler hazırlık aşamasında. Satın alma butonları ödeme doğrulaması tamamlanana kadar kapalıdır.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
                 }
-                Text("* Önerilen Türkiye fiyatlarıdır; geçerli fiyat Google Play'den alınır. Abonelikler otomatik yenilenir; Google Play üzerinden iptal edilebilir.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+                Text("Geçerli fiyat Google Play'den alınır. Abonelikler otomatik yenilenir; Google Play üzerinden iptal edilebilir.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

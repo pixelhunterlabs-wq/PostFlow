@@ -32,7 +32,7 @@ class VoiceLogActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { KaloriDarkTheme { VoiceLogScreen() } }
+        setContent { KaloriDarkTheme { PremiumGate("voice") { VoiceLogScreen() } } }
     }
 }
 
