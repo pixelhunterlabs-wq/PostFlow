@@ -698,6 +698,19 @@ private fun CanonicalHomeScreen(
             }
         }
         item {
+            androidx.compose.foundation.lazy.LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(categories) { category ->
+                    FilterChip(
+                        selected = selectedCategory == category,
+                        onClick = { selectedCategory = category },
+                        label = { Text(category) }
+                    )
+                }
+            }
+        }
+        item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 CanonicalQuickButton("Fotoğraf", Icons.Filled.CameraAlt, onPhoto, Modifier.weight(1f))
                 CanonicalQuickButton("Barkod", Icons.Filled.QrCodeScanner, onBarcode, Modifier.weight(1f))
@@ -814,8 +827,12 @@ private fun CanonicalFoodAddScreen(
 ) {
     var mode by remember { mutableStateOf(FoodAddMode.SEARCH) }
     var query by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("Tümü") }
+    val categories = remember { listOf("Tümü") + TurkishFoodCatalog.foods.map { it.category }.distinct().sorted() }
     val favorites = state.favorites.map { it.catalogFood() }
-    val results = TurkishFoodCatalog.foods.filter { query.isBlank() || it.name.contains(query, ignoreCase = true) }.take(18)
+    val results = remember(query, selectedCategory) {
+        FoodCatalogSearch.search(TurkishFoodCatalog.foods, query, selectedCategory, limit = 500)
+    }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -863,7 +880,7 @@ private fun CanonicalFoodAddScreen(
                 CanonicalFoodResultRow(food, true, { onFavorite(food) }) { onSelect(food) }
             }
         } else {
-            if (query.isBlank()) item { CanonicalSectionHeader("Popüler Yiyecekler") }
+            item { CanonicalSectionHeader(if (query.isBlank() && selectedCategory == "Tümü") "Tüm Yiyecekler (${results.size})" else "Sonuçlar (${results.size})") }
             items(results, key = { "food-${it.name}" }) { food ->
                 CanonicalFoodResultRow(food, favorites.any { it.name.equals(food.name, true) }, { onFavorite(food) }) { onSelect(food) }
             }
