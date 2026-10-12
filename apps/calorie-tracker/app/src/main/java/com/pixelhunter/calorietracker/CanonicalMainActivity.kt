@@ -11,6 +11,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -1455,9 +1457,29 @@ private fun CanonicalEmptyCard(title: String, subtitle: String, onAction: () -> 
 
 @Composable
 private fun CanonicalCatalogAmountDialog(food: CatalogFood, onDismiss: () -> Unit, onSave: (String, Double) -> Unit) {
-    var grams by remember(food.name) { mutableStateOf("100") }
+    var quantity by remember(food.name) { mutableStateOf("100") }
+    var unit by remember(food.name) { mutableStateOf(FoodMeasureUnit.GRAM) }
+    var spoonFill by remember(food.name) { mutableStateOf(SpoonFill.LEVEL) }
+    var correctedGrams by remember(food.name) { mutableStateOf("") }
     var meal by remember(food.name) { mutableStateOf("Öğün") }
-    val g = grams.toDoubleOrNull() ?: 0.0
+
+    fun chooseUnit(next: FoodMeasureUnit) {
+        if (next != unit) {
+            unit = next
+            quantity = if (next == FoodMeasureUnit.GRAM) "100" else "1"
+            correctedGrams = ""
+        }
+    }
+
+    val count = quantity.replace(',', '.').toDoubleOrNull() ?: 0.0
+    val estimate = FoodPortionCalculator.grams(food, unit, count, spoonFill)
+    val actualGrams = if (unit != FoodMeasureUnit.GRAM && correctedGrams.isNotBlank()) {
+        correctedGrams.replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 && it <= 10_000 }
+    } else estimate
+    val grams = actualGrams ?: 0.0
+    val gramText = String.format(Locale.forLanguageTag("tr-TR"), "%.1f", grams)
+    val calories = FoodPortionCalculator.kcal(food, grams).toInt()
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = KaloriDialog,
@@ -1465,13 +1487,83 @@ private fun CanonicalCatalogAmountDialog(food: CatalogFood, onDismiss: () -> Uni
         textContentColor = KaloriText,
         title = { Text(food.name, fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                Modifier
+                    .heightIn(max = 440.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 CanonicalMealSelector(meal) { meal = it }
-                CanonicalNumberField("Gram", grams) { grams = it }
-                Text("Yaklaşık ${(food.calories100g * g / 100).toInt()} kcal", color = KaloriGreen, fontWeight = FontWeight.Bold)
+                Text("Ölçü birimi", color = KaloriText, fontWeight = FontWeight.Bold)
+                FilterChip(
+                    selected = unit == FoodMeasureUnit.GRAM,
+                    onClick = { chooseUnit(FoodMeasureUnit.GRAM) },
+                    label = { Text("Gram") }
+                )
+                Text("Kaşık çeşitleri", color = KaloriMuted, style = MaterialTheme.typography.labelMedium)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(FoodPortionCalculator.spoons) { option ->
+                        FilterChip(
+                            selected = unit == option,
+                            onClick = { chooseUnit(option) },
+                            label = { Text(option.label) }
+                        )
+                    }
+                }
+                Text("Bardak, fincan, kepçe ve kase", color = KaloriMuted, style = MaterialTheme.typography.labelMedium)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(FoodPortionCalculator.glasses) { option ->
+                        FilterChip(
+                            selected = unit == option,
+                            onClick = { chooseUnit(option) },
+                            label = { Text(option.label) }
+                        )
+                    }
+                }
+                CanonicalNumberField(
+                    if (unit == FoodMeasureUnit.GRAM) "Miktar (gram)" else "Kaç ${unit.label.lowercase(Locale.forLanguageTag("tr-TR"))}?",
+                    quantity
+                ) {
+                    quantity = it
+                    correctedGrams = ""
+                }
+                if (unit.isSpoon && !FoodPortionCalculator.isPourable(food)) {
+                    Text("Kaşık doluluğu", color = KaloriMuted, style = MaterialTheme.typography.labelMedium)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(SpoonFill.entries) { level ->
+                            FilterChip(
+                                selected = spoonFill == level,
+                                onClick = {
+                                    spoonFill = level
+                                    correctedGrams = ""
+                                },
+                                label = { Text(level.label) }
+                            )
+                        }
+                    }
+                }
+                if (unit != FoodMeasureUnit.GRAM) {
+                    val estimateText = estimate?.let {
+                        String.format(Locale.forLanguageTag("tr-TR"), "%.1f", it)
+                    } ?: "—"
+                    Text("Ölçü karşılığı: yaklaşık ${estimateText} g", color = KaloriMuted)
+                    CanonicalNumberField("Gramı düzelt (isteğe bağlı)", correctedGrams) { correctedGrams = it }
+                }
+                Text("Kaydedilecek: ${gramText} g · Yaklaşık ${calories} kcal", color = KaloriGreen, fontWeight = FontWeight.Bold)
+                Text(
+                    "Ev ölçüleri ve yiyeceğin yoğunluğu değişebilir; gram karşılığı tahminidir. Biliyorsan gerçek gramı yaz.",
+                    color = KaloriMuted,
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         },
-        confirmButton = { Button(enabled = g > 0, onClick = { onSave(meal, g) }, colors = ButtonDefaults.buttonColors(containerColor = KaloriGreen, contentColor = Color.Black)) { Text("Günlüğe ekle") } },
+        confirmButton = {
+            Button(
+                enabled = grams > 0,
+                onClick = { onSave(meal, grams) },
+                colors = ButtonDefaults.buttonColors(containerColor = KaloriGreen, contentColor = Color.Black)
+            ) { Text("Günlüğe ekle") }
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("İptal", color = KaloriMuted) } }
     )
 }
