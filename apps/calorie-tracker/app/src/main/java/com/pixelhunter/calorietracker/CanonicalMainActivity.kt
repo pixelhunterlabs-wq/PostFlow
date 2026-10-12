@@ -162,7 +162,9 @@ class CanonicalMainActivity : ComponentActivity() {
                     client.auth.exchangeCodeForSession(code)
                     check(client.auth.currentSessionOrNull() != null)
                 }
-                // SessionStatus.Authenticated drives the existing home/onboarding routing.
+                // Do not depend solely on a session event that may have fired before
+                // the UI observer was attached, especially after cold-start callbacks.
+                ViewModelProvider(this@CanonicalMainActivity)[TrackerViewModel::class.java].refreshSessionAndData()
             } catch (error: TimeoutCancellationException) {
                 callbackError = "Google oturumu doğrulaması zaman aşımına uğradı. Tekrar deneyin."
             } catch (error: CancellationException) {
