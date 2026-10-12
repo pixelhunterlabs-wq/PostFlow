@@ -124,7 +124,7 @@ internal class GooglePlaySubscriptionBilling(
         }
     }
 
-    override fun onPurchasesUpdated(result: BillingResult, purchases: MutableList<Purchase>?) {
+    override fun onPurchasesUpdated(result: BillingResult, purchases: List<Purchase>?) {
         when (result.responseCode) {
             BillingClient.BillingResponseCode.OK -> purchases.orEmpty().forEach(::processPurchase)
             BillingClient.BillingResponseCode.USER_CANCELED -> Unit
