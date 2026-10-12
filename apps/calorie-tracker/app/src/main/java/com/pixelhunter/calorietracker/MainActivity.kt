@@ -298,12 +298,14 @@ class TrackerViewModel : ViewModel() {
         googleSignInJob = viewModelScope.launch {
             uiState = uiState.copy(loading = true, message = null)
             try {
-                client.auth.awaitInitialization()
+                kotlinx.coroutines.withTimeout(15_000) { client.auth.awaitInitialization() }
+                // signInWith opens the system browser for the OAuth handshake.
+                // Do not keep the login button loading for two minutes after launch.
                 client.auth.signInWith(Google, redirectUrl = SupabaseProvider.oauthRedirectUrl)
-                // Prevent a second flow overwriting the SDK's stored PKCE verifier.
-                kotlinx.coroutines.delay(120_000)
+                uiState = uiState.copy(loading = false)
+            } catch (error: kotlinx.coroutines.TimeoutCancellationException) {
                 uiState = uiState.copy(loading = false,
-                    message = "Google girişi tamamlanmadı. İptal ettiyseniz yeniden deneyin.")
+                    message = "Google bağlantısı hazırlanırken zaman aşımı oluştu. İnterneti kontrol edip tekrar deneyin.")
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
