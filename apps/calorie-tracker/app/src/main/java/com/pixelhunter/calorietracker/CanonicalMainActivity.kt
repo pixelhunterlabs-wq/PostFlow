@@ -257,8 +257,10 @@ private fun CanonicalTrackerApp(vm: TrackerViewModel = viewModel()) {
 
     LaunchedEffect(state.message) {
         state.message?.let {
-            snackbar.showSnackbar(it)
-            vm.consumeMessage()
+            if (state.signedIn) {
+                snackbar.showSnackbar(it)
+                vm.consumeMessage()
+            }
         }
     }
 
@@ -271,6 +273,7 @@ private fun CanonicalTrackerApp(vm: TrackerViewModel = viewModel()) {
         state.authChecking -> CanonicalCenterState("Oturum açılıyor", "Hesabın kontrol ediliyor.")
         !state.signedIn -> CanonicalLoginScreen(
             loading = state.loading,
+            message = state.message,
             onGoogle = vm::signInWithGoogle,
             onPrivacy = ::openPrivacy
         )
@@ -463,7 +466,7 @@ private fun CanonicalTrackerApp(vm: TrackerViewModel = viewModel()) {
 }
 
 @Composable
-private fun CanonicalLoginScreen(loading: Boolean, onGoogle: () -> Unit, onPrivacy: () -> Unit) {
+private fun CanonicalLoginScreen(loading: Boolean, message: String?, onGoogle: () -> Unit, onPrivacy: () -> Unit) {
     Box(Modifier.fillMaxSize().background(KaloriBackground)) {
         Image(
             painter = painterResource(R.drawable.login_fitness_background),
@@ -519,6 +522,10 @@ private fun CanonicalLoginScreen(loading: Boolean, onGoogle: () -> Unit, onPriva
                             modifier = Modifier.align(Alignment.CenterEnd).size(22.dp)
                         )
                     }
+                }
+                if (!message.isNullOrBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(message, color = Color.White, style = MaterialTheme.typography.bodyMedium)
                 }
                 Spacer(Modifier.height(13.dp))
                 Text(
