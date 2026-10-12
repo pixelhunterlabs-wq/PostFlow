@@ -18,11 +18,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -38,14 +44,40 @@ import androidx.compose.ui.unit.dp
  * Displaying the plans must never grant a Premium entitlement.
  */
 class PremiumPlansActivity : ComponentActivity() {
+    private lateinit var billing: GooglePlaySubscriptionBilling
+    private var offers by mutableStateOf<Map<String, PlayPlanOffer>>(emptyMap())
+    private var message by mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        billing = GooglePlaySubscriptionBilling(
+            activity = this,
+            scope = lifecycleScope,
+            onPlans = { offers = it },
+            onMessage = { message = it }
+        )
         setContent {
             KaloriDarkTheme {
-                PremiumPlansScreen()
+                PremiumPlansScreen(
+                    offers = offers,
+                    message = message,
+                    onBuy = billing::purchase,
+                    onManage = billing::openSubscriptionManagement
+                )
             }
         }
+        billing.start()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::billing.isInitialized) billing.restore()
+    }
+
+    override fun onDestroy() {
+        if (::billing.isInitialized) billing.close()
+        super.onDestroy()
     }
 }
 
@@ -64,7 +96,12 @@ private val planFeatures = listOf(
 )
 
 @Composable
-private fun PremiumPlansScreen() {
+private fun PremiumPlansScreen(
+    offers: Map<String, PlayPlanOffer>,
+    message: String?,
+    onBuy: (String) -> Unit,
+    onManage: () -> Unit
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize().background(KaloriBackground),
         contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 32.dp, bottom = 44.dp),
@@ -78,7 +115,7 @@ private fun PremiumPlansScreen() {
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 PlanPriceCard("ÜCRETSİZ", "0 TL", "Temel takip", false, Modifier.weight(1f))
-                PlanPriceCard("PREMIUM", "99,99 TL", "Aylık abonelik", true, Modifier.weight(1f))
+                PlanPriceCard("PREMIUM", offers[PremiumBillingConfig.MONTHLY]?.formattedPrice ?: "99,99 TL*", "Aylık abonelik", true, Modifier.weight(1f))
             }
         }
         item {
@@ -90,8 +127,8 @@ private fun PremiumPlansScreen() {
                 Column(Modifier.fillMaxWidth().padding(18.dp)) {
                     Text("YILLIK PREMIUM", color = KaloriGreen, fontWeight = FontWeight.Black)
                     Spacer(Modifier.height(4.dp))
-                    Text("699,99 TL / yıl", color = KaloriText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-                    Text("Aylık yaklaşık 58,33 TL • Aylığa göre yaklaşık %42 tasarruf", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+                    Text((offers[PremiumBillingConfig.YEARLY]?.formattedPrice ?: "699,99 TL*") + " / yıl", color = KaloriText, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                    Text("Türkiye için önerilen yıllık fiyat • Kesin fiyat Google Play'de gösterilir.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -120,12 +157,26 @@ private fun PremiumPlansScreen() {
             }
         }
         item {
-            Text(
-                "Abonelik satın alma henüz etkin değil. Ödemeler Google Play üzerinden açıldığında burada gösterilecek. " +
-                    "Abonelikler otomatik yenilenir; Google Play'den yönetilebilir ve iptal edilebilir.",
-                color = KaloriMuted,
-                style = MaterialTheme.typography.bodySmall
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(
+                    onClick = { onBuy(PremiumBillingConfig.MONTHLY) },
+                    enabled = PremiumBillingConfig.SALES_ENABLED && offers.containsKey(PremiumBillingConfig.MONTHLY),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Aylık Premium'a Geç") }
+                Button(
+                    onClick = { onBuy(PremiumBillingConfig.YEARLY) },
+                    enabled = PremiumBillingConfig.SALES_ENABLED && offers.containsKey(PremiumBillingConfig.YEARLY),
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Yıllık Premium'a Geç") }
+                OutlinedButton(onClick = onManage, modifier = Modifier.fillMaxWidth()) {
+                    Text("Google Play'de Aboneliğimi Yönet")
+                }
+                message?.let { Text(it, color = KaloriGreen, style = MaterialTheme.typography.bodySmall) }
+                if (!PremiumBillingConfig.SALES_ENABLED) {
+                    Text("Abonelikler hazırlık aşamasında. Satın alma butonları ödeme doğrulaması tamamlanana kadar kapalıdır.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+                }
+                Text("* Önerilen Türkiye fiyatlarıdır; geçerli fiyat Google Play'den alınır. Abonelikler otomatik yenilenir; Google Play üzerinden iptal edilebilir.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }
