@@ -83,7 +83,7 @@ internal class GooglePlaySubscriptionBilling(
             if (result.responseCode != BillingClient.BillingResponseCode.OK) return@queryProductDetailsAsync
             val offers = mutableMapOf<String, PlayPlanOffer>()
             query.productDetailsList.forEach { product ->
-                product.subscriptionOfferDetailsList.orEmpty().forEach { offer ->
+                product.subscriptionOfferDetails.orEmpty().forEach { offer ->
                     val planId = offer.basePlanId
                     if (planId !in setOf(PremiumBillingConfig.MONTHLY, PremiumBillingConfig.YEARLY)) return@forEach
                     // Only base plans; do not accidentally show an introductory price as renewal price.

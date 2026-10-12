@@ -112,7 +112,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.mlkit.vision.codescanner.GmsBarcodeScannerOptions
 import com.google.android.gms.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
-import io.github.jan.supabase.auth.handleDeeplinks
+import io.github.jan.supabase.auth.auth
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.ViewModelProvider
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.YearMonth
@@ -132,24 +138,41 @@ import kotlin.math.abs
  */
 class CanonicalMainActivity : ComponentActivity() {
     private var callbackPending by mutableStateOf(false)
-    private var callbackError by mutableStateOf(false)
+    private var callbackError by mutableStateOf<String?>(null)
 
     private fun handleAuthIntent(intent: Intent) {
+        val url = intent.data?.toString() ?: return
         if (intent.data?.scheme != "calorietracker" || intent.data?.host != "login") return
-        if (!OAuthCallback.isValid(intent.data.toString())) {
-            callbackPending = false
-            callbackError = true
+        // Consume immediately so activity recreation cannot exchange the same code twice.
+        setIntent(Intent(intent).apply { data = null })
+        if (callbackPending) return
+        ViewModelProvider(this)[TrackerViewModel::class.java].finishGoogleSignIn()
+        val code = OAuthCallback.code(url)
+        if (code == null) {
+            callbackError = OAuthCallback.errorMessage(url)
             return
         }
         callbackPending = true
-        callbackError = false
-        SupabaseProvider.client?.handleDeeplinks(intent,
-            onSessionSuccess = {
-                setIntent(Intent(this.intent).apply { data = null })
+        callbackError = null
+        lifecycleScope.launch {
+            try {
+                val client = SupabaseProvider.client ?: error("Supabase configuration missing")
+                withTimeout(30_000) {
+                    client.auth.awaitInitialization()
+                    client.auth.exchangeCodeForSession(code)
+                    check(client.auth.currentSessionOrNull() != null)
+                }
+                // SessionStatus.Authenticated drives the existing home/onboarding routing.
+            } catch (error: TimeoutCancellationException) {
+                callbackError = "Google oturumu doğrulaması zaman aşımına uğradı. Tekrar deneyin."
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                callbackError = OAuthCallback.failureMessage(error)
+            } finally {
                 callbackPending = false
-            },
-            onError = { callbackPending = false; callbackError = true }
-        )
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -159,9 +182,9 @@ class CanonicalMainActivity : ComponentActivity() {
         setContent {
             KaloriDarkTheme {
                 if (callbackPending) CanonicalCenterState("Oturum açılıyor", "Google hesabın doğrulanıyor.")
-                else if (callbackError) Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Google girişi iptal edildi veya doğrulanamadı.")
-                    Button(onClick = { callbackError = false }) { Text("Tekrar dene") }
+                else if (callbackError != null) Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(callbackError.orEmpty())
+                    Button(onClick = { callbackError = null }) { Text("Tekrar dene") }
                 }
                 else CanonicalTrackerApp()
             }

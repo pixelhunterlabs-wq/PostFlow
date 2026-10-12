@@ -234,12 +234,19 @@ class TrackerViewModel : ViewModel() {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     private var sessionRefreshJob: Job? = null
+    private var googleSignInJob: Job? = null
+
+    fun finishGoogleSignIn() {
+        googleSignInJob?.cancel()
+        googleSignInJob = null
+        uiState = uiState.copy(loading = false)
+    }
 
     init {
         viewModelScope.launch {
             supabase?.auth?.sessionStatus?.collect { status ->
                 when (status) {
-                    is SessionStatus.Authenticated -> refreshSessionAndData()
+                    is SessionStatus.Authenticated -> { finishGoogleSignIn(); refreshSessionAndData() }
                     is SessionStatus.NotAuthenticated -> {
                         sessionRefreshJob?.cancel()
                         uiState = TrackerUiState(authChecking = false)
@@ -283,23 +290,24 @@ class TrackerViewModel : ViewModel() {
     }
 
     fun signInWithGoogle() {
-        val client = supabase ?: return
-        viewModelScope.launch {
-            // signInWith returns as soon as the browser/custom tab is opened. Keep the
-            // button disabled until the callback is handled, so duplicate OAuth flows
-            // cannot be started from the login screen.
+        if (googleSignInJob?.isActive == true || uiState.loading) return
+        val client = supabase ?: run {
+            showMessage("Google giriş bağlantısı yapılandırılmamış.")
+            return
+        }
+        googleSignInJob = viewModelScope.launch {
             uiState = uiState.copy(loading = true, message = null)
-            runCatching {
+            try {
+                client.auth.awaitInitialization()
                 client.auth.signInWith(Google, redirectUrl = SupabaseProvider.oauthRedirectUrl)
-            }.onSuccess {
-                // The browser owns the OAuth flow now. Do not leave the login button
-                // in an endless loading state while waiting for the deep-link callback.
-                uiState = uiState.copy(loading = false)
-            }.onFailure {
-                uiState = uiState.copy(
-                    loading = false,
-                    message = "Google girişi başlatılamadı. Lütfen tekrar deneyin."
-                )
+                // Prevent a second flow overwriting the SDK's stored PKCE verifier.
+                kotlinx.coroutines.delay(120_000)
+                uiState = uiState.copy(loading = false,
+                    message = "Google girişi tamamlanmadı. İptal ettiyseniz yeniden deneyin.")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                uiState = uiState.copy(loading = false, message = OAuthCallback.failureMessage(error))
             }
         }
     }
