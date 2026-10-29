@@ -1029,26 +1029,75 @@ private fun CanonicalBarcodeScreen(
 
 @Composable
 private fun CanonicalProgressScreen(state: TrackerUiState, onWeight: () -> Unit, onAddWeight: () -> Unit) {
-    PremiumGate("reports") {
-        var range by remember { mutableStateOf(ProgressRange.WEEK) }
-        var report by remember { mutableStateOf<PremiumReport?>(null) }
-        var error by remember { mutableStateOf<String?>(null) }
-        var retry by remember { mutableIntStateOf(0) }
-        LaunchedEffect(range, retry, state.entries, state.weights) {
-            report = null; error = null
-            runCatching { PremiumAccess.report(range.name) }.onSuccess { report = it }.onFailure { error = it.message }
-        }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item { Text("Premium Beslenme Analizi", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black) }
-            item { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf(ProgressRange.WEEK, ProgressRange.MONTH, ProgressRange.YEAR).forEach { option -> FilterChip(selected = range == option, onClick = { range = option }, label = { Text(option.label) }) } } }
-            error?.let { item { Text(it, color = KaloriMuted); TextButton(onClick = { retry++ }) { Text("Yeniden dene") } } }
-            if (report == null && error == null) item { Text("Analiz hazırlanıyor…", color = KaloriMuted) }
-            report?.let { data ->
-                item { CanonicalNeonCard { Text("Kalori Alımı"); CanonicalBarChart(data.chart.map { it.date.takeLast(5) to it.calories }, state.calorieGoal) } }
-                item { Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { CanonicalStatCard("Kayıtlı gün ortalaması", "${data.average} kcal", Icons.Filled.BarChart, Modifier.weight(1f)); CanonicalStatCard("Hedefe Uyum", "%${data.adherence}", Icons.Filled.TrackChanges, Modifier.weight(1f)) } }
-                item { CanonicalNeonCard { Text("Dönem toplamları • ${data.recordedDays} kayıtlı gün", fontWeight = FontWeight.Bold); Text("Protein: ${data.protein.toInt()} g\nKarbonhidrat: ${data.carbs.toInt()} g\nYağ: ${data.fat.toInt()} g", color = KaloriMuted) } }
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 32.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        item { Text("İlerleme ve Geçmiş", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black) }
+        item {
+            CanonicalNeonCard {
+                Text("Son 7 gün • Temel kalori geçmişi", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                CanonicalBarChart(canonicalChartData(state, ProgressRange.WEEK), state.calorieGoal)
+                Text("Günlük öğün kayıtların tüm üyeliklerde görünür.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
             }
-            item { OutlinedButton(onClick = onWeight) { Text("Gelişmiş kilo grafiği") }; TextButton(onClick = onAddWeight) { Text("Kilo kaydı ekle") } }
+        }
+        item {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = onWeight, modifier = Modifier.weight(1f)) { Text("Kilo geçmişi") }
+                Button(onClick = onAddWeight, modifier = Modifier.weight(1f)) { Text("Kilo ekle") }
+            }
+        }
+        item {
+            Text("Premium Beslenme Analizi", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Haftalık, aylık ve yıllık ayrıntılı raporlar Premium üyeliğe özeldir.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+        }
+        item {
+            PremiumGate("reports") {
+                CanonicalPremiumProgressAnalysis(state)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CanonicalPremiumProgressAnalysis(state: TrackerUiState) {
+    var range by remember { mutableStateOf(ProgressRange.WEEK) }
+    var report by remember { mutableStateOf<PremiumReport?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var retry by remember { mutableIntStateOf(0) }
+    LaunchedEffect(range, retry, state.entries, state.weights) {
+        report = null
+        error = null
+        runCatching { PremiumAccess.report(range.name) }
+            .onSuccess { report = it }
+            .onFailure { error = it.message }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(ProgressRange.WEEK, ProgressRange.MONTH, ProgressRange.YEAR).forEach { option ->
+                FilterChip(selected = range == option, onClick = { range = option }, label = { Text(option.label) })
+            }
+        }
+        error?.let {
+            Text(it, color = KaloriMuted)
+            TextButton(onClick = { retry++ }) { Text("Yeniden dene") }
+        }
+        if (report == null && error == null) Text("Analiz hazırlanıyor…", color = KaloriMuted)
+        report?.let { data ->
+            CanonicalNeonCard {
+                Text("Kalori Alımı")
+                CanonicalBarChart(data.chart.map { it.date.takeLast(5) to it.calories }, state.calorieGoal)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                CanonicalStatCard("Kayıtlı gün ortalaması", "${data.average} kcal", Icons.Filled.BarChart, Modifier.weight(1f))
+                CanonicalStatCard("Hedefe Uyum", "%${data.adherence}", Icons.Filled.TrackChanges, Modifier.weight(1f))
+            }
+            CanonicalNeonCard {
+                Text("Dönem toplamları • ${data.recordedDays} kayıtlı gün", fontWeight = FontWeight.Bold)
+                Text("Protein: ${data.protein.toInt()} g\nKarbonhidrat: ${data.carbs.toInt()} g\nYağ: ${data.fat.toInt()} g", color = KaloriMuted)
+            }
         }
     }
 }
