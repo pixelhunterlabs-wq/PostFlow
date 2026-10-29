@@ -1,5 +1,6 @@
 package com.pixelhunter.calorietracker
 
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Base64
@@ -91,6 +92,26 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
     var submitting by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var mealType by remember { mutableStateOf("Öğle") }
+    var photoQuota by remember { mutableStateOf<AiPhotoQuota?>(null) }
+    var quotaMessage by remember { mutableStateOf<String?>(null) }
+    var quotaRefresh by remember { mutableIntStateOf(0) }
+
+    // Informational UI only: the Edge Function enforces the actual quota atomically.
+    LaunchedEffect(quotaRefresh) {
+        runCatching { PremiumAccess.request() }
+            .onSuccess { response ->
+                photoQuota = AiPhotoQuota(
+                    used = response.optInt("photoUsed", 0).coerceAtLeast(0),
+                    limit = response.optInt("photoLimit", 0).coerceAtLeast(0),
+                    premium = response.optBoolean("premium")
+                )
+                quotaMessage = null
+            }
+            .onFailure {
+                photoQuota = null
+                quotaMessage = "Aylık analiz hakkı görüntülenemedi. İnternet bağlantını kontrol et."
+            }
+    }
     val previewBitmap = selectedUri?.let { uri ->
         remember(uri) { runCatching { context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }?.asImageBitmap() }.getOrNull() }
     }
@@ -128,6 +149,28 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
             contentPadding = PaddingValues(16.dp, 8.dp, 16.dp, 40.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = KaloriSurfaceAlt), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Aylık AI fotoğraf hakkın", color = KaloriText, fontWeight = FontWeight.Bold)
+                        val remaining = photoQuota
+                        if (remaining == null) {
+                            Text(quotaMessage ?: "Kullanım hakkın kontrol ediliyor…", color = KaloriMuted)
+                        } else {
+                            Text(if (remaining.premium) "Premium üyelik" else "Ücretsiz üyelik", color = KaloriGreen)
+                            Text("${remaining.remaining} analiz hakkın kaldı • ${remaining.used} / ${remaining.limit} kullanıldı", color = KaloriText)
+                            if (remaining.exhausted) Text("Aylık hakkın doldu. Yeni dönemi bekleyebilir veya Premium planları inceleyebilirsin.", color = KaloriYellow)
+                            if (!remaining.premium) {
+                                OutlinedButton(onClick = { context.startActivity(Intent(context, PremiumPlansActivity::class.java)) }) {
+                                    Text("Premium seçeneklerini incele")
+                                }
+                            }
+                        }
+                        TextButton(onClick = { quotaRefresh++ }) { Text("Kullanım hakkını yenile") }
+                        Text("Analiz hakları her takvim ayının başında (UTC) yenilenir.", color = KaloriMuted, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
             item {
                 Card(colors = CardDefaults.cardColors(containerColor = KaloriSurface), shape = RoundedCornerShape(18.dp)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -184,7 +227,7 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
                         }
 
                         Button(
-                            enabled = selectedUri != null && !loading,
+                            enabled = selectedUri != null && !loading && photoQuota?.exhausted != true,
                             onClick = {
                                 scope.launch {
                                     loading = true
@@ -195,8 +238,12 @@ private fun PhotoMealAnalysisScreen(vm: TrackerViewModel = viewModel()) {
                                         .onSuccess { result ->
                                             if (result.items.isEmpty()) snackbar.showSnackbar("Fotoğrafta güvenilir bir yemek tespit edilemedi. Başka bir fotoğraf dene.")
                                             else { analysis = result; editableItems = result.items.map(::EditableAiMeal) }
+                                            quotaRefresh++
                                         }
-                                        .onFailure { snackbar.showSnackbar("Fotoğraf analiz edilemedi. Lütfen tekrar dene.") }
+                                        .onFailure {
+                                            snackbar.showSnackbar(it.message ?: "Fotoğraf analiz edilemedi. Lütfen tekrar dene.")
+                                            quotaRefresh++
+                                        }
                                     loading = false
                                 }
                             },
